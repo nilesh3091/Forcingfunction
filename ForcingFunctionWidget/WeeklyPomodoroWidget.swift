@@ -196,7 +196,6 @@ struct WeeklyPomodoroWidgetEntryView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
-        .background(Color.black)
         .widgetURL(URL(string: "forcingfunction://stats"))
     }
     
