@@ -38,8 +38,7 @@ extension Color {
 }
 
 struct TimerView: View {
-    @StateObject private var viewModel = TimerViewModel()
-    @State private var showingSettings = false
+    @ObservedObject var viewModel: TimerViewModel
     @State private var showingCompletionAlert = false
     @State private var isDragging = false
     @State private var dragAngle: Double = 0
@@ -89,16 +88,6 @@ struct TimerView: View {
                         .foregroundColor(.white.opacity(0.7))
                     
                     Spacer()
-                    
-                    // Settings button
-                    Button(action: {
-                        showingSettings = true
-                    }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                    .accessibilityLabel("Settings")
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
@@ -402,9 +391,6 @@ struct TimerView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showingSettings) {
-            SettingsView(viewModel: viewModel)
-        }
         .alert("Session Complete!", isPresented: $showingCompletionAlert) {
             Button("Start Next") {
                 viewModel.startNextSession()
@@ -618,6 +604,6 @@ struct SweptAreaView: View {
 }
 
 #Preview {
-    TimerView()
+    TimerView(viewModel: TimerViewModel())
 }
 

@@ -6,7 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0D51D91C2ED0EAC600D636BF /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D51D91B2ED0EAC600D636BF /* WidgetKit.framework */; };
+		0D51D91E2ED0EAC600D636BF /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D51D91D2ED0EAC600D636BF /* SwiftUI.framework */; };
+		0D51D92D2ED0EAC800D636BF /* ForcingFunctionWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0D51D9192ED0EAC600D636BF /* ForcingFunctionWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		0D51D92B2ED0EAC800D636BF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0D9006EF2EC4F797009E1F38 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0D51D9182ED0EAC600D636BF;
+			remoteInfo = ForcingFunctionWidgetExtension;
+		};
 		0D9007072EC4F799009E1F38 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0D9006EF2EC4F797009E1F38 /* Project object */;
@@ -23,15 +36,61 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		0D51D9322ED0EAC800D636BF /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0D51D92D2ED0EAC800D636BF /* ForcingFunctionWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0D51D9192ED0EAC600D636BF /* ForcingFunctionWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ForcingFunctionWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D51D91B2ED0EAC600D636BF /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		0D51D91D2ED0EAC600D636BF /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		0D51D9362ED0EE8B00D636BF /* ForcingFunctionWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ForcingFunctionWidgetExtension.entitlements; sourceTree = "<group>"; };
 		0D9006F72EC4F797009E1F38 /* ForcingFunction.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ForcingFunction.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D9007062EC4F799009E1F38 /* ForcingFunctionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ForcingFunctionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D9007102EC4F799009E1F38 /* ForcingFunctionUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ForcingFunctionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0D51D92E2ED0EAC800D636BF /* Exceptions for "ForcingFunctionWidget" folder in "ForcingFunctionWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0D51D9182ED0EAC600D636BF /* ForcingFunctionWidgetExtension */;
+		};
+		0D51D9382ED0EF2000D636BF /* Exceptions for "ForcingFunction" folder in "ForcingFunction" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0D9006F62EC4F797009E1F38 /* ForcingFunction */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		0D51D91F2ED0EAC600D636BF /* ForcingFunctionWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0D51D92E2ED0EAC800D636BF /* Exceptions for "ForcingFunctionWidget" folder in "ForcingFunctionWidgetExtension" target */,
+			);
+			path = ForcingFunctionWidget;
+			sourceTree = "<group>";
+		};
 		0D9006F92EC4F797009E1F38 /* ForcingFunction */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0D51D9382ED0EF2000D636BF /* Exceptions for "ForcingFunction" folder in "ForcingFunction" target */,
+			);
 			path = ForcingFunction;
 			sourceTree = "<group>";
 		};
@@ -48,6 +107,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0D51D9162ED0EAC600D636BF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0D51D91E2ED0EAC600D636BF /* SwiftUI.framework in Frameworks */,
+				0D51D91C2ED0EAC600D636BF /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0D9006F42EC4F797009E1F38 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -72,12 +140,24 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0D51D91A2ED0EAC600D636BF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0D51D91B2ED0EAC600D636BF /* WidgetKit.framework */,
+				0D51D91D2ED0EAC600D636BF /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		0D9006EE2EC4F797009E1F38 = {
 			isa = PBXGroup;
 			children = (
+				0D51D9362ED0EE8B00D636BF /* ForcingFunctionWidgetExtension.entitlements */,
 				0D9006F92EC4F797009E1F38 /* ForcingFunction */,
 				0D9007092EC4F799009E1F38 /* ForcingFunctionTests */,
 				0D9007132EC4F799009E1F38 /* ForcingFunctionUITests */,
+				0D51D91F2ED0EAC600D636BF /* ForcingFunctionWidget */,
+				0D51D91A2ED0EAC600D636BF /* Frameworks */,
 				0D9006F82EC4F797009E1F38 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +168,7 @@
 				0D9006F72EC4F797009E1F38 /* ForcingFunction.app */,
 				0D9007062EC4F799009E1F38 /* ForcingFunctionTests.xctest */,
 				0D9007102EC4F799009E1F38 /* ForcingFunctionUITests.xctest */,
+				0D51D9192ED0EAC600D636BF /* ForcingFunctionWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,6 +176,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0D51D9182ED0EAC600D636BF /* ForcingFunctionWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0D51D92F2ED0EAC800D636BF /* Build configuration list for PBXNativeTarget "ForcingFunctionWidgetExtension" */;
+			buildPhases = (
+				0D51D9152ED0EAC600D636BF /* Sources */,
+				0D51D9162ED0EAC600D636BF /* Frameworks */,
+				0D51D9172ED0EAC600D636BF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0D51D91F2ED0EAC600D636BF /* ForcingFunctionWidget */,
+			);
+			name = ForcingFunctionWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = ForcingFunctionWidgetExtension;
+			productReference = 0D51D9192ED0EAC600D636BF /* ForcingFunctionWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		0D9006F62EC4F797009E1F38 /* ForcingFunction */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0D90071A2EC4F799009E1F38 /* Build configuration list for PBXNativeTarget "ForcingFunction" */;
@@ -102,10 +205,12 @@
 				0D9006F32EC4F797009E1F38 /* Sources */,
 				0D9006F42EC4F797009E1F38 /* Frameworks */,
 				0D9006F52EC4F797009E1F38 /* Resources */,
+				0D51D9322ED0EAC800D636BF /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0D51D92C2ED0EAC800D636BF /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0D9006F92EC4F797009E1F38 /* ForcingFunction */,
@@ -170,9 +275,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
+				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					0D51D9182ED0EAC600D636BF = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
 					0D9006F62EC4F797009E1F38 = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
@@ -203,11 +311,19 @@
 				0D9006F62EC4F797009E1F38 /* ForcingFunction */,
 				0D9007052EC4F799009E1F38 /* ForcingFunctionTests */,
 				0D90070F2EC4F799009E1F38 /* ForcingFunctionUITests */,
+				0D51D9182ED0EAC600D636BF /* ForcingFunctionWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		0D51D9172ED0EAC600D636BF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0D9006F52EC4F797009E1F38 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -232,6 +348,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0D51D9152ED0EAC600D636BF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0D9006F32EC4F797009E1F38 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -256,6 +379,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0D51D92C2ED0EAC800D636BF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0D51D9182ED0EAC600D636BF /* ForcingFunctionWidgetExtension */;
+			targetProxy = 0D51D92B2ED0EAC800D636BF /* PBXContainerItemProxy */;
+		};
 		0D9007082EC4F799009E1F38 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 0D9006F62EC4F797009E1F38 /* ForcingFunction */;
@@ -269,6 +397,70 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0D51D9302ED0EAC800D636BF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = ForcingFunctionWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NX76YKXPM7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ForcingFunctionWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ForcingFunctionWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionApp.ForcingFunctionWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0D51D9312ED0EAC800D636BF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = ForcingFunctionWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NX76YKXPM7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ForcingFunctionWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ForcingFunctionWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionApp.ForcingFunctionWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		0D9007182EC4F799009E1F38 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -395,11 +587,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ForcingFunction/ForcingFunction.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NX76YKXPM7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ForcingFunction/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -410,7 +604,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunction;
+				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -427,11 +621,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ForcingFunction/ForcingFunction.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NX76YKXPM7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ForcingFunction/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -442,7 +638,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunction;
+				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -541,6 +737,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0D51D92F2ED0EAC800D636BF /* Build configuration list for PBXNativeTarget "ForcingFunctionWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0D51D9302ED0EAC800D636BF /* Debug */,
+				0D51D9312ED0EAC800D636BF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		0D9006F22EC4F797009E1F38 /* Build configuration list for PBXProject "ForcingFunction" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -27,9 +27,18 @@ import SwiftUI
 
 @main
 struct ForcingFunctionApp: App {
+    init() {
+        // Initialize widget data on app launch
+        WidgetDataManager.shared.updateWidgetData()
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onOpenURL { url in
+                    // Handle deep links from widget
+                    // The MainTabView will handle the actual navigation
+                }
         }
     }
 }

@@ -12,8 +12,8 @@ import UserNotifications
 
 class TimerViewModel: ObservableObject {
     // MARK: - Published Properties
-    @Published var selectedMinutes: Double = AppSettings.defaultPomodoroMinutes
-    @Published var remainingSeconds: Int = 0
+    @Published var selectedMinutes: Double = 25.0
+    @Published var remainingSeconds: Int = 1500  // 25 minutes * 60 seconds
     @Published var timerState: TimerState = .idle
     @Published var currentSessionType: SessionType = .work
     @Published var completedPomodoros: Int = 0
@@ -36,6 +36,10 @@ class TimerViewModel: ObservableObject {
     private var startTime: Date?
     private var pausedSeconds: Int = 0
     private var cancellables = Set<AnyCancellable>()
+    private var hasLoadedSettings = false
+    private var currentSession: PomodoroSession?
+    private let dataStore = PomodoroDataStore.shared
+    private var isAutoStartingNext = false
     
     // MARK: - Computed Properties
     var themeColor: ThemeColor {
@@ -114,10 +118,20 @@ class TimerViewModel: ObservableObject {
             }
         }
         
-        // Always start at 0 minutes (top position)
-        selectedMinutes = 0.0
+        // Always start at 25 minutes
+        selectedMinutes = 25.0
         remainingSeconds = Int(selectedMinutes * 60)
+        
+        // Load statistics from stored data
+        loadStatistics()
+        
         requestNotificationPermission()
+    }
+    
+    // MARK: - Statistics Loading
+    private func loadStatistics() {
+        completedPomodoros = dataStore.getCompletedPomodorosCount()
+        totalFocusMinutes = dataStore.getTotalFocusMinutes()
     }
     
     // MARK: - Timer Control
@@ -127,17 +141,41 @@ class TimerViewModel: ObservableObject {
         // Don't start if time is 0
         guard selectedMinutes > 0 else { return }
         
+        let now = Date()
+        
         if timerState == .paused {
             // Resume from paused state
             remainingSeconds = pausedSeconds
+            
+            // Add resume event to current session
+            if var session = currentSession {
+                let resumeEvent = SessionEvent(timestamp: now, eventType: .resumed)
+                session.events.append(resumeEvent)
+                session.status = .running
+                currentSession = session
+                dataStore.updateSession(session)
+            }
         } else {
             // Start new session
             remainingSeconds = Int(selectedMinutes * 60)
             pausedSeconds = remainingSeconds
+            
+            // Create new session
+            let newSession = PomodoroSession(
+                sessionType: currentSessionType,
+                startTime: now,
+                plannedDurationMinutes: selectedMinutes,
+                status: .running,
+                events: [SessionEvent(timestamp: now, eventType: .started)],
+                wasAutoStarted: isAutoStartingNext
+            )
+            currentSession = newSession
+            dataStore.addSession(newSession)
+            isAutoStartingNext = false // Reset flag after use
         }
         
         timerState = .running
-        startTime = Date()
+        startTime = now
         
         if hapticsEnabled {
             HapticManager.playImpact(style: .medium)
@@ -156,6 +194,16 @@ class TimerViewModel: ObservableObject {
         timer = nil
         cancelNotification()
         
+        // Add pause event to current session
+        let now = Date()
+        if var session = currentSession {
+            let pauseEvent = SessionEvent(timestamp: now, eventType: .paused)
+            session.events.append(pauseEvent)
+            session.status = .paused
+            currentSession = session
+            dataStore.updateSession(session)
+        }
+        
         if hapticsEnabled {
             HapticManager.playImpact(style: .light)
         }
@@ -164,6 +212,18 @@ class TimerViewModel: ObservableObject {
     func resetTimer() {
         timer?.invalidate()
         timer = nil
+        
+        // Cancel current session if it exists
+        let now = Date()
+        if var session = currentSession {
+            let cancelEvent = SessionEvent(timestamp: now, eventType: .cancelled)
+            session.events.append(cancelEvent)
+            session.endTime = now
+            session.status = .cancelled
+            dataStore.updateSession(session)
+            currentSession = nil
+        }
+        
         timerState = .idle
         remainingSeconds = Int(selectedMinutes * 60)
         pausedSeconds = remainingSeconds
@@ -179,11 +239,24 @@ class TimerViewModel: ObservableObject {
         timer?.invalidate()
         timer = nil
         
-        if timerState == .running || timerState == .paused {
-            // Update focus time if it was a work session
-            if currentSessionType == .work {
-                totalFocusMinutes += Int(selectedMinutes) - (remainingSeconds / 60)
+        let now = Date()
+        
+        // Complete current session
+        if var session = currentSession {
+            let completeEvent = SessionEvent(timestamp: now, eventType: .completed)
+            session.events.append(completeEvent)
+            session.endTime = now
+            session.status = .completed
+            dataStore.updateSession(session)
+            
+            // Update statistics if it was a work session
+            if session.sessionType == .work {
+                loadStatistics() // Reload from data store to get accurate totals
+                // Update widget data
+                WidgetDataManager.shared.updateWidgetData()
             }
+            
+            currentSession = nil
         }
         
         timerState = .completed
@@ -212,7 +285,9 @@ class TimerViewModel: ObservableObject {
     func startNextSession() {
         // Determine next session type
         if currentSessionType == .work {
-            completedPomodoros += 1
+            // Update completed pomodoros count from data store
+            completedPomodoros = dataStore.getCompletedPomodorosCount()
+            
             if completedPomodoros >= pomodorosBeforeLongBreak {
                 currentSessionType = .longBreak
                 selectedMinutes = longBreakMinutes
@@ -230,6 +305,14 @@ class TimerViewModel: ObservableObject {
         remainingSeconds = Int(selectedMinutes * 60)
         pausedSeconds = remainingSeconds
         timerState = .idle
+        
+        // Auto-start the next session if enabled
+        if autoStartNext {
+            isAutoStartingNext = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.startTimer()
+            }
+        }
     }
     
     // MARK: - Time Selection
@@ -324,8 +407,13 @@ class TimerViewModel: ObservableObject {
     // MARK: - Settings Updates
     func updateSettings() {
         // When settings change, update current session if idle
-        // Skip update on first load to preserve initial 0 value
-        if timerState == .idle && selectedMinutes != 0 {
+        // Skip update on first load to preserve initial 25 minute value
+        if !hasLoadedSettings {
+            hasLoadedSettings = true
+            return
+        }
+        
+        if timerState == .idle {
             let newMinutes: Double
             switch currentSessionType {
             case .work:
