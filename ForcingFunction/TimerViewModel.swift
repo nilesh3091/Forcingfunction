@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 import Combine
 import UserNotifications
+import UIKit
 
 class TimerViewModel: ObservableObject {
     // MARK: - Published Properties
@@ -35,6 +36,9 @@ class TimerViewModel: ObservableObject {
     private var timer: Timer?
     private var startTime: Date?
     private var pausedSeconds: Int = 0
+    private var originalDurationSeconds: Int = 0  // Store original duration for time-based calculation
+    private var pausedDuration: TimeInterval = 0  // Track total paused time
+    private var pauseStartTime: Date?  // Track when pause started
     private var cancellables = Set<AnyCancellable>()
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
@@ -88,7 +92,8 @@ class TimerViewModel: ObservableObject {
     var elapsedAngle: Double {
         guard selectedMinutes >= 0 else { return 0 }
         let progress = self.progress
-        return currentAngle + (progress * 360.0)
+        // Rotate counter-clockwise from currentAngle back to 0 (12 o'clock)
+        return currentAngle * (1.0 - progress)
     }
     
     // MARK: - Initialization
@@ -126,6 +131,9 @@ class TimerViewModel: ObservableObject {
         loadStatistics()
         
         requestNotificationPermission()
+        
+        // Set up app lifecycle observers
+        setupLifecycleObservers()
     }
     
     // MARK: - Statistics Loading
@@ -145,6 +153,13 @@ class TimerViewModel: ObservableObject {
         
         if timerState == .paused {
             // Resume from paused state
+            // Add the paused duration to our total paused time
+            if let pauseStart = pauseStartTime {
+                pausedDuration += now.timeIntervalSince(pauseStart)
+                pauseStartTime = nil
+            }
+            
+            // Set remaining seconds from paused state (will be recalculated by tick() based on time)
             remainingSeconds = pausedSeconds
             
             // Add resume event to current session
@@ -159,6 +174,9 @@ class TimerViewModel: ObservableObject {
             // Start new session
             remainingSeconds = Int(selectedMinutes * 60)
             pausedSeconds = remainingSeconds
+            originalDurationSeconds = remainingSeconds
+            pausedDuration = 0  // Reset paused duration for new session
+            pauseStartTime = nil
             
             // Create new session
             let newSession = PomodoroSession(
@@ -190,6 +208,7 @@ class TimerViewModel: ObservableObject {
         
         timerState = .paused
         pausedSeconds = remainingSeconds
+        pauseStartTime = Date()  // Track when pause started
         timer?.invalidate()
         timer = nil
         cancelNotification()
@@ -228,6 +247,9 @@ class TimerViewModel: ObservableObject {
         remainingSeconds = Int(selectedMinutes * 60)
         pausedSeconds = remainingSeconds
         startTime = nil
+        originalDurationSeconds = 0
+        pausedDuration = 0
+        pauseStartTime = nil
         cancelNotification()
         
         if hapticsEnabled {
@@ -362,13 +384,78 @@ class TimerViewModel: ObservableObject {
     
     private func tick() {
         guard timerState == .running else { return }
+        guard let startTime = startTime else { return }
         
-        if remainingSeconds > 0 {
-            remainingSeconds -= 1
+        // Calculate elapsed time based on actual time, accounting for pauses
+        let now = Date()
+        var elapsed = now.timeIntervalSince(startTime)
+        
+        // Subtract paused duration
+        elapsed -= pausedDuration
+        
+        // If currently paused, subtract the current pause duration
+        if let pauseStart = pauseStartTime {
+            elapsed -= now.timeIntervalSince(pauseStart)
         }
+        
+        // Calculate remaining seconds
+        remainingSeconds = max(0, originalDurationSeconds - Int(elapsed))
         
         if remainingSeconds <= 0 {
             endSession()
+        }
+    }
+    
+    // MARK: - Timer State Synchronization
+    private func setupLifecycleObservers() {
+        // Observe when app becomes active
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                self?.syncTimerState()
+            }
+            .store(in: &cancellables)
+        
+        // Observe when app will enter foreground
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .sink { [weak self] _ in
+                self?.syncTimerState()
+            }
+            .store(in: &cancellables)
+    }
+    
+    func syncTimerState() {
+        // Only sync if timer is running
+        guard timerState == .running else { return }
+        guard let startTime = startTime else { return }
+        
+        let now = Date()
+        var elapsed = now.timeIntervalSince(startTime)
+        
+        // Subtract paused duration
+        elapsed -= pausedDuration
+        
+        // If currently paused, subtract the current pause duration
+        if let pauseStart = pauseStartTime {
+            elapsed -= now.timeIntervalSince(pauseStart)
+        }
+        
+        // Calculate remaining seconds
+        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
+        
+        // Update remaining seconds
+        remainingSeconds = calculatedRemaining
+        
+        // If timer should have completed, end the session
+        if calculatedRemaining <= 0 {
+            endSession()
+            return
+        }
+        
+        // Restart timer if it's not running (app was backgrounded)
+        if timer == nil {
+            startTimerTicking()
+            // Reschedule notification with updated remaining time
+            scheduleNotification()
         }
     }
     

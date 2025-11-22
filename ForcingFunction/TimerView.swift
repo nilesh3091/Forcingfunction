@@ -121,19 +121,26 @@ struct TimerView: View {
                         .frame(width: dialSize, height: dialSize)
                     
                     // Swept area fill (pie slice showing covered area)
-                    // Only show when idle (setting time), not when running
-                    if viewModel.timerState == .idle {
-                        let currentTotalAngle = isDragging ? cumulativeDragAngle : viewModel.currentAngle
-                        let clampedAngle = min(currentTotalAngle, 360.0)  // Hard limit at 360° (60 minutes)
-                        
-                        if clampedAngle > 0 {
-                            // Full opacity solid color for swept area
-                            SweptAreaView(
-                                totalAngle: clampedAngle,
-                                dialSize: dialSize,
-                                color: viewModel.accentColor  // Full opacity solid color
-                            )
+                    // Show when idle (full size) or running/paused (shrinking as time progresses)
+                    let pieAngle: Double = {
+                        if viewModel.timerState == .idle {
+                            // When idle, show full selected time
+                            let currentTotalAngle = isDragging ? cumulativeDragAngle : viewModel.currentAngle
+                            return min(currentTotalAngle, 360.0)  // Hard limit at 360° (60 minutes)
+                        } else {
+                            // When running/paused, show remaining time (shrinking pie)
+                            let remainingAngle = viewModel.currentAngle * (1.0 - viewModel.progress)
+                            return max(0, min(remainingAngle, 360.0))
                         }
+                    }()
+                    
+                    if pieAngle > 0 {
+                        // Full opacity solid color for swept area
+                        SweptAreaView(
+                            totalAngle: pieAngle,
+                            dialSize: dialSize,
+                            color: viewModel.accentColor  // Full opacity solid color
+                        )
                     }
                     
                     // Tick marks
@@ -408,6 +415,7 @@ struct TimerView: View {
         }
         .onAppear {
             viewModel.updateSettings()
+            viewModel.syncTimerState()
         }
     }
 }

@@ -84,12 +84,28 @@ class WidgetDataManager {
             }
         }
         
-        // Get weekly goal from UserDefaults
-        let weeklyGoalMinutes = UserDefaults.standard.integer(forKey: "weeklyGoalMinutes")
+        // Sync settings from standard UserDefaults to shared UserDefaults
+        // (since @AppStorage uses standard UserDefaults by default)
+        if let sharedDefaults = sharedDefaults {
+            // Sync themeColor
+            let standardThemeColor = UserDefaults.standard.string(forKey: "themeColor")
+            if let themeColor = standardThemeColor {
+                sharedDefaults.set(themeColor, forKey: "themeColor")
+            }
+            
+            // Sync weeklyGoalMinutes
+            let standardWeeklyGoal = UserDefaults.standard.integer(forKey: "weeklyGoalMinutes")
+            if standardWeeklyGoal > 0 {
+                sharedDefaults.set(standardWeeklyGoal, forKey: "weeklyGoalMinutes")
+            }
+        }
+        
+        // Get weekly goal from shared UserDefaults
+        let weeklyGoalMinutes = sharedDefaults?.integer(forKey: "weeklyGoalMinutes") ?? 0
         let defaultGoal = weeklyGoalMinutes > 0 ? weeklyGoalMinutes : 1200 // Default 20 hours
         
-        // Get accent color
-        let themeColorString = UserDefaults.standard.string(forKey: "themeColor") ?? ThemeColor.red.rawValue
+        // Get accent color from shared UserDefaults (now synced from standard)
+        let themeColorString = sharedDefaults?.string(forKey: "themeColor") ?? ThemeColor.red.rawValue
         
         // Create widget data
         let widgetData = WeeklyWidgetData(
