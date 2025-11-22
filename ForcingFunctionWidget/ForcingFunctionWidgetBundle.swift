@@ -12,5 +12,6 @@ import SwiftUI
 struct ForcingFunctionWidgetBundle: WidgetBundle {
     var body: some Widget {
         WeeklyPomodoroWidget()
+        ForcingFunctionWidgetLiveActivity()
     }
 }

@@ -44,6 +44,7 @@ class TimerViewModel: ObservableObject {
     private var currentSession: PomodoroSession?
     private let dataStore = PomodoroDataStore.shared
     private var isAutoStartingNext = false
+    private let liveActivityManager = LiveActivityManager.shared
     
     // MARK: - Computed Properties
     var themeColor: ThemeColor {
@@ -170,6 +171,13 @@ class TimerViewModel: ObservableObject {
                 currentSession = session
                 dataStore.updateSession(session)
             }
+            
+            // Resume: Update Live Activity to running state
+            liveActivityManager.updateActivity(
+                remainingSeconds: remainingSeconds,
+                timerState: .running,
+                sessionType: currentSessionType
+            )
         } else {
             // Start new session
             remainingSeconds = Int(selectedMinutes * 60)
@@ -190,6 +198,14 @@ class TimerViewModel: ObservableObject {
             currentSession = newSession
             dataStore.addSession(newSession)
             isAutoStartingNext = false // Reset flag after use
+            
+            // Start Live Activity for new session
+            liveActivityManager.startActivity(
+                sessionId: newSession.id,
+                sessionType: currentSessionType,
+                totalDurationSeconds: originalDurationSeconds,
+                remainingSeconds: remainingSeconds
+            )
         }
         
         timerState = .running
@@ -223,6 +239,13 @@ class TimerViewModel: ObservableObject {
             dataStore.updateSession(session)
         }
         
+        // Update Live Activity to paused state
+        liveActivityManager.updateActivity(
+            remainingSeconds: remainingSeconds,
+            timerState: .paused,
+            sessionType: currentSessionType
+        )
+        
         if hapticsEnabled {
             HapticManager.playImpact(style: .light)
         }
@@ -251,6 +274,9 @@ class TimerViewModel: ObservableObject {
         pausedDuration = 0
         pauseStartTime = nil
         cancelNotification()
+        
+        // End Live Activity
+        liveActivityManager.endActivity()
         
         if hapticsEnabled {
             HapticManager.playSelection()
@@ -295,6 +321,9 @@ class TimerViewModel: ObservableObject {
         
         // Cancel notification
         cancelNotification()
+        
+        // End Live Activity
+        liveActivityManager.endActivity()
         
         // Auto-start next session if enabled
         if autoStartNext {
@@ -400,6 +429,13 @@ class TimerViewModel: ObservableObject {
         
         // Calculate remaining seconds
         remainingSeconds = max(0, originalDurationSeconds - Int(elapsed))
+        
+        // Update Live Activity
+        liveActivityManager.updateActivity(
+            remainingSeconds: remainingSeconds,
+            timerState: .running,
+            sessionType: currentSessionType
+        )
         
         if remainingSeconds <= 0 {
             endSession()
