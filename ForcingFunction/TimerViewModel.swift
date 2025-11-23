@@ -45,6 +45,7 @@ class TimerViewModel: ObservableObject {
     private let dataStore = PomodoroDataStore.shared
     private var isAutoStartingNext = false
     private let liveActivityManager = LiveActivityManager.shared
+    private let backgroundTaskManager = BackgroundTaskManager.shared
     
     // MARK: - Computed Properties
     var themeColor: ThemeColor {
@@ -176,7 +177,9 @@ class TimerViewModel: ObservableObject {
             liveActivityManager.updateActivity(
                 remainingSeconds: remainingSeconds,
                 timerState: .running,
-                sessionType: currentSessionType
+                sessionType: currentSessionType,
+                startTime: startTime ?? now,
+                pausedDuration: pausedDuration
             )
         } else {
             // Start new session
@@ -204,12 +207,20 @@ class TimerViewModel: ObservableObject {
                 sessionId: newSession.id,
                 sessionType: currentSessionType,
                 totalDurationSeconds: originalDurationSeconds,
-                remainingSeconds: remainingSeconds
+                remainingSeconds: remainingSeconds,
+                startTime: now,
+                pausedDuration: 0
             )
         }
         
         timerState = .running
         startTime = now
+        
+        // Start background task for Live Activity updates
+        backgroundTaskManager.startBackgroundUpdates { [weak self] in
+            guard let self = self, self.timerState == .running else { return }
+            self.updateLiveActivityInBackground()
+        }
         
         if hapticsEnabled {
             HapticManager.playImpact(style: .medium)
@@ -239,11 +250,16 @@ class TimerViewModel: ObservableObject {
             dataStore.updateSession(session)
         }
         
+        // Stop background updates when paused
+        backgroundTaskManager.stopBackgroundUpdates()
+        
         // Update Live Activity to paused state
         liveActivityManager.updateActivity(
             remainingSeconds: remainingSeconds,
             timerState: .paused,
-            sessionType: currentSessionType
+            sessionType: currentSessionType,
+            startTime: startTime ?? Date(),
+            pausedDuration: pausedDuration
         )
         
         if hapticsEnabled {
@@ -274,6 +290,9 @@ class TimerViewModel: ObservableObject {
         pausedDuration = 0
         pauseStartTime = nil
         cancelNotification()
+        
+        // Stop background updates
+        backgroundTaskManager.stopBackgroundUpdates()
         
         // End Live Activity
         liveActivityManager.endActivity()
@@ -321,6 +340,9 @@ class TimerViewModel: ObservableObject {
         
         // Cancel notification
         cancelNotification()
+        
+        // Stop background updates
+        backgroundTaskManager.stopBackgroundUpdates()
         
         // End Live Activity
         liveActivityManager.endActivity()
@@ -434,12 +456,37 @@ class TimerViewModel: ObservableObject {
         liveActivityManager.updateActivity(
             remainingSeconds: remainingSeconds,
             timerState: .running,
-            sessionType: currentSessionType
+            sessionType: currentSessionType,
+            startTime: startTime ?? Date(),
+            pausedDuration: pausedDuration
         )
         
         if remainingSeconds <= 0 {
             endSession()
         }
+    }
+    
+    /// Update Live Activity from background task
+    private func updateLiveActivityInBackground() {
+        guard timerState == .running, let startTime = startTime else { return }
+        
+        let now = Date()
+        var elapsed = now.timeIntervalSince(startTime)
+        elapsed -= pausedDuration
+        
+        if let pauseStart = pauseStartTime {
+            elapsed -= now.timeIntervalSince(pauseStart)
+        }
+        
+        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
+        
+        liveActivityManager.updateActivity(
+            remainingSeconds: calculatedRemaining,
+            timerState: .running,
+            sessionType: currentSessionType,
+            startTime: startTime,
+            pausedDuration: pausedDuration
+        )
     }
     
     // MARK: - Timer State Synchronization
@@ -492,6 +539,12 @@ class TimerViewModel: ObservableObject {
             startTimerTicking()
             // Reschedule notification with updated remaining time
             scheduleNotification()
+            
+            // Restart background updates
+            backgroundTaskManager.startBackgroundUpdates { [weak self] in
+                guard let self = self, self.timerState == .running else { return }
+                self.updateLiveActivityInBackground()
+            }
         }
     }
     

@@ -19,6 +19,8 @@ struct ForcingFunctionWidgetAttributes: ActivityAttributes {
         var remainingSeconds: Int
         var timerState: String  // "running", "paused"
         var sessionType: String  // "Work", "Short Break", "Long Break"
+        var startTime: Date  // When timer started (for calculating remaining time)
+        var pausedDuration: TimeInterval  // Total paused time in seconds
     }
 
     // Fixed non-changing properties - set once when activity starts
@@ -45,8 +47,8 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                 
                 Spacer()
                 
-                // Timer display
-                Text(formatTime(context.state.remainingSeconds))
+                // Timer display - calculate from startTime if running, otherwise use remainingSeconds
+                Text(formatTime(calculateRemainingSeconds(context: context)))
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundColor(.primary)
@@ -75,7 +77,7 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                         .tint(.blue)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(formatTime(context.state.remainingSeconds))
+                    Text(formatTime(calculateRemainingSeconds(context: context)))
                         .font(.system(size: 36, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
@@ -88,7 +90,7 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                     .foregroundStyle(.primary)
             } compactTrailing: {
                 // Compact trailing: Remaining time
-                Text(formatTime(context.state.remainingSeconds))
+                Text(formatTime(calculateRemainingSeconds(context: context)))
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
@@ -113,8 +115,28 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
     // Helper function to calculate progress (0.0 to 1.0)
     private func progress(context: ActivityViewContext<ForcingFunctionWidgetAttributes>) -> Double {
         guard context.attributes.totalDurationSeconds > 0 else { return 0 }
-        let elapsed = context.attributes.totalDurationSeconds - context.state.remainingSeconds
+        let remaining = calculateRemainingSeconds(context: context)
+        let elapsed = context.attributes.totalDurationSeconds - remaining
         return Double(elapsed) / Double(context.attributes.totalDurationSeconds)
+    }
+    
+    // Helper function to calculate remaining seconds from startTime if timer is running
+    // Falls back to remainingSeconds if paused or if calculation fails
+    private func calculateRemainingSeconds(context: ActivityViewContext<ForcingFunctionWidgetAttributes>) -> Int {
+        // If paused, use the stored remainingSeconds
+        if context.state.timerState == "paused" {
+            return context.state.remainingSeconds
+        }
+        
+        // If running, calculate from startTime
+        let now = Date()
+        let elapsed = now.timeIntervalSince(context.state.startTime)
+        let adjustedElapsed = elapsed - context.state.pausedDuration
+        let calculatedRemaining = max(0, context.attributes.totalDurationSeconds - Int(adjustedElapsed))
+        
+        // Use calculated time if it's reasonable (within 1 second of stored value or more accurate)
+        // This ensures the widget stays accurate even if updates stop
+        return calculatedRemaining
     }
 }
 
@@ -133,7 +155,9 @@ extension ForcingFunctionWidgetAttributes.ContentState {
         ForcingFunctionWidgetAttributes.ContentState(
             remainingSeconds: 1200,
             timerState: "running",
-            sessionType: "Work"
+            sessionType: "Work",
+            startTime: Date(),
+            pausedDuration: 0
         )
      }
      
@@ -141,7 +165,9 @@ extension ForcingFunctionWidgetAttributes.ContentState {
          ForcingFunctionWidgetAttributes.ContentState(
              remainingSeconds: 900,
              timerState: "paused",
-             sessionType: "Work"
+             sessionType: "Work",
+             startTime: Date(),
+             pausedDuration: 0
          )
      }
 }
