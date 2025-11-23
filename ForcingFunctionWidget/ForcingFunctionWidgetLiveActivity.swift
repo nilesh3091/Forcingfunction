@@ -42,27 +42,52 @@ struct CompactTimerView: View {
     }
 }
 
-// Separate view for Dynamic Island compact leading to show appropriate icon
+// Separate view for Dynamic Island compact leading to show appropriate icon with progress ring
 struct CompactSessionIconView: View {
-    let sessionType: String
+    let context: ActivityViewContext<ForcingFunctionWidgetAttributes>
     
     var body: some View {
-        Image(systemName: iconName)
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.primary)
+        ZStack {
+            // Circular progress ring
+            Circle()
+                .stroke(
+                    Color.secondary.opacity(0.2),
+                    lineWidth: 2.5
+                )
+            
+            // Progress arc
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    Color.primary,
+                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 0.3), value: progress)
+        }
+        .frame(width: 20, height: 20)
     }
     
-    private var iconName: String {
-        switch sessionType {
-        case "Work":
-            return "briefcase.fill"
-        case "Short Break":
-            return "cup.and.saucer.fill"
-        case "Long Break":
-            return "moon.fill"
-        default:
-            return "timer"
+    private var progress: Double {
+        guard context.attributes.totalDurationSeconds > 0 else { return 0 }
+        let remaining = calculateRemainingSeconds()
+        let elapsed = context.attributes.totalDurationSeconds - remaining
+        return min(1.0, max(0.0, Double(elapsed) / Double(context.attributes.totalDurationSeconds)))
+    }
+    
+    private func calculateRemainingSeconds() -> Int {
+        // If paused, use the stored remainingSeconds
+        if context.state.timerState == "paused" {
+            return context.state.remainingSeconds
         }
+        
+        // If running, calculate from startTime
+        let now = Date()
+        let elapsed = now.timeIntervalSince(context.state.startTime)
+        let adjustedElapsed = elapsed - context.state.pausedDuration
+        let calculatedRemaining = max(0, context.attributes.totalDurationSeconds - Int(adjustedElapsed))
+        
+        return calculatedRemaining
     }
 }
 
@@ -141,8 +166,8 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             } compactLeading: {
-                // Compact leading: Session type icon
-                CompactSessionIconView(sessionType: context.state.sessionType)
+                // Compact leading: Session type icon with progress ring
+                CompactSessionIconView(context: context)
             } compactTrailing: {
                 // Compact trailing: Remaining time
                 // Use a view that forces recalculation on each render
