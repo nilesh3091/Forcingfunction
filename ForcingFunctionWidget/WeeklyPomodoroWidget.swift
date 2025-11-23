@@ -228,19 +228,19 @@ struct WeeklyPomodoroWidgetEntryView: View {
                         VStack(spacing: 2) {
                     // Bar
                     let dailyMinutes = entry.dailyTotals[index]
-                    let maxBarHeight: CGFloat = 36.0
-                    let minBarHeight: CGFloat = 2.4
+                    let maxBarHeight: CGFloat = 43.2
+                    let minBarHeight: CGFloat = 2.88
                     let barHeight = maxDailyTotal > 0 
                         ? max(minBarHeight, CGFloat(dailyMinutes) / CGFloat(maxDailyTotal) * maxBarHeight)
                         : minBarHeight
                     
                     RoundedRectangle(cornerRadius: 2)
                         .fill(dailyMinutes > 0 ? accentColor : Color.gray.opacity(0.3))
-                        .frame(width: 9.6, height: barHeight)
+                        .frame(width: 11.52, height: barHeight)
                             
                             // Day label
                             Text(dayAbbreviation(index))
-                                .font(.system(size: 9, weight: .regular))
+                                .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(.white.opacity(0.7))
                         }
                     }
