@@ -28,11 +28,12 @@ class BackgroundTaskManager {
             self?.endBackgroundTask()
         }
         
-        // Schedule periodic updates every 5 seconds
+        // Schedule periodic updates every 2 seconds to keep Dynamic Island accurate
+        // More frequent than 5s but less battery-intensive than 1s
         // Must run on main thread for UI updates
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.updateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] timer in
+            self.updateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
                 guard let self = self, self.isRunning else {
                     timer.invalidate()
                     return

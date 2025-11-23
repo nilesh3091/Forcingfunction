@@ -9,6 +9,63 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
+// Separate view for Dynamic Island compact trailing to ensure it recalculates
+struct CompactTimerView: View {
+    let context: ActivityViewContext<ForcingFunctionWidgetAttributes>
+    
+    var body: some View {
+        Text(formatTime(calculateRemainingSeconds()))
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.primary)
+    }
+    
+    private func formatTime(_ totalSeconds: Int) -> String {
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+    
+    private func calculateRemainingSeconds() -> Int {
+        // If paused, use the stored remainingSeconds
+        if context.state.timerState == "paused" {
+            return context.state.remainingSeconds
+        }
+        
+        // If running, calculate from startTime
+        let now = Date()
+        let elapsed = now.timeIntervalSince(context.state.startTime)
+        let adjustedElapsed = elapsed - context.state.pausedDuration
+        let calculatedRemaining = max(0, context.attributes.totalDurationSeconds - Int(adjustedElapsed))
+        
+        return calculatedRemaining
+    }
+}
+
+// Separate view for Dynamic Island compact leading to show appropriate icon
+struct CompactSessionIconView: View {
+    let sessionType: String
+    
+    var body: some View {
+        Image(systemName: iconName)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.primary)
+    }
+    
+    private var iconName: String {
+        switch sessionType {
+        case "Work":
+            return "briefcase.fill"
+        case "Short Break":
+            return "cup.and.saucer.fill"
+        case "Long Break":
+            return "moon.fill"
+        default:
+            return "timer"
+        }
+    }
+}
+
 // IMPORTANT: ForcingFunctionWidgetAttributes must be accessible from both targets
 // Option 1: Add LiveActivityAttributes.swift to widget extension target in Xcode
 // Option 2: Keep this definition here (current approach - works but creates duplication)
@@ -84,16 +141,12 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             } compactLeading: {
-                // Compact leading: Session type icon or initial
-                Text(String(context.state.sessionType.prefix(1)))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.primary)
+                // Compact leading: Session type icon
+                CompactSessionIconView(sessionType: context.state.sessionType)
             } compactTrailing: {
                 // Compact trailing: Remaining time
-                Text(formatTime(calculateRemainingSeconds(context: context)))
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
+                // Use a view that forces recalculation on each render
+                CompactTimerView(context: context)
             } minimal: {
                 // Minimal: Just a timer icon or dot
                 Image(systemName: "timer")
