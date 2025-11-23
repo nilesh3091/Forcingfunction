@@ -36,15 +36,35 @@ class WidgetDataManager {
     
     // MARK: - Calculate and Store Weekly Data
     
+    /// Get the start of the current week (Monday at 00:00:00)
+    /// This explicitly calculates Monday regardless of calendar's firstWeekday setting
+    private func getStartOfCurrentWeek(calendar: Calendar, from date: Date) -> Date {
+        let today = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: today)
+        // Calendar weekday: 1=Sunday, 2=Monday, ..., 7=Saturday
+        // Calculate days back to Monday (0 = Monday, 6 = Sunday)
+        let daysFromMonday = (weekday == 1) ? 6 : weekday - 2
+        return calendar.date(byAdding: .day, value: -daysFromMonday, to: today) ?? today
+    }
+    
+    /// Check if a date is within the current week (Monday-Sunday)
+    func isDateInCurrentWeek(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfCurrentWeek = getStartOfCurrentWeek(calendar: calendar, from: now)
+        let endOfCurrentWeek = calendar.date(byAdding: .day, value: 6, to: startOfCurrentWeek)!
+        let endOfWeekEndOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endOfCurrentWeek) ?? endOfCurrentWeek
+        return date >= startOfCurrentWeek && date <= endOfWeekEndOfDay
+    }
+    
     /// Calculate weekly totals and store in shared UserDefaults
     func updateWidgetData() {
         let dataStore = PomodoroDataStore.shared
         let calendar = Calendar.current
         let now = Date()
         
-        // Get start of current week (Monday at 00:00:00)
-        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)
-        guard let startOfWeek = calendar.date(from: components) else { return }
+        // Get start of current week (Monday at 00:00:00) - explicitly calculate Monday
+        let startOfWeek = getStartOfCurrentWeek(calendar: calendar, from: now)
         
         // Get end of week (Sunday at 23:59:59)
         guard let endOfWeek = calendar.date(byAdding: .day, value: 6, to: startOfWeek) else { return }
@@ -68,20 +88,45 @@ class WidgetDataManager {
         print("WidgetDataManager: Week range: \(startOfWeek) to \(endOfWeekEndOfDay)")
         print("WidgetDataManager: Total minutes this week: \(currentWeekTotalMinutes)")
         print("WidgetDataManager: Daily totals: \(dailyTotals)")
+        let dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        for (index, total) in dailyTotals.enumerated() {
+            if total > 0 {
+                print("WidgetDataManager:   \(dayNames[index]): \(total) minutes")
+            }
+        }
         #endif
         
         for session in completedWorkSessions {
             guard let activeMinutes = session.activeDurationMinutes else { continue }
             let sessionDate = session.startTime
             
-            // Get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+            // Validate session is within the week range (safety check)
+            guard sessionDate >= startOfWeek && sessionDate <= endOfWeekEndOfDay else {
+                #if DEBUG
+                print("WidgetDataManager: Warning - Session outside week range: \(sessionDate)")
+                #endif
+                continue
+            }
+            
+            // Get day of week (1 = Sunday, 2 = Monday, ..., 7 = Saturday)
             let weekday = calendar.component(.weekday, from: sessionDate)
             // Convert to our array index (0 = Monday, 6 = Sunday)
             let index = (weekday == 1) ? 6 : weekday - 2
             
-            if index >= 0 && index < 7 {
-                dailyTotals[index] += Int(activeMinutes)
+            // Validate index is within bounds
+            guard index >= 0 && index < 7 else {
+                #if DEBUG
+                print("WidgetDataManager: Warning - Invalid weekday index \(index) for weekday \(weekday), session: \(sessionDate)")
+                #endif
+                continue
             }
+            
+            dailyTotals[index] += Int(activeMinutes)
+            
+            #if DEBUG
+            let dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            print("WidgetDataManager: Session on \(sessionDate): weekday=\(weekday) (\(dayNames[index])), minutes=\(Int(activeMinutes))")
+            #endif
         }
         
         // Sync settings from standard UserDefaults to shared UserDefaults

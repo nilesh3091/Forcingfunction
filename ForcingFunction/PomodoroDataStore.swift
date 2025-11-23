@@ -120,5 +120,31 @@ class PomodoroDataStore {
     func getSession(byId id: UUID) -> PomodoroSession? {
         return sessions.first { $0.id == id }
     }
+    
+    /// Delete a session by ID
+    func deleteSession(byId id: UUID) {
+        sessions.removeAll { $0.id == id }
+        saveSessions()
+    }
+    
+    /// Delete multiple sessions
+    func deleteSessions(_ sessionsToDelete: [PomodoroSession]) {
+        let idsToDelete = Set(sessionsToDelete.map { $0.id })
+        sessions.removeAll { idsToDelete.contains($0.id) }
+        saveSessions()
+    }
+    
+    /// Clean up orphaned sessions (running/paused sessions from previous app launches)
+    /// These are sessions that were left in running/paused state when app crashed or was force-quit
+    func cleanupOrphanedSessions() {
+        let orphanedSessions = sessions.filter { session in
+            session.status == .running || session.status == .paused
+        }
+        
+        if !orphanedSessions.isEmpty {
+            print("Cleaning up \(orphanedSessions.count) orphaned session(s)")
+            deleteSessions(orphanedSessions)
+        }
+    }
 }
 

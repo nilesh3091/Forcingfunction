@@ -129,6 +129,10 @@ class TimerViewModel: ObservableObject {
         selectedMinutes = 25.0
         remainingSeconds = Int(selectedMinutes * 60)
         
+        // Clean up orphaned sessions from crashes/force quits
+        // This removes any running/paused sessions that were left behind
+        dataStore.cleanupOrphanedSessions()
+        
         // Load statistics from stored data
         loadStatistics()
         

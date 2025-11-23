@@ -34,6 +34,26 @@ struct WeeklyPomodoroWidget: Widget {
 struct WeeklyPomodoroTimelineProvider: TimelineProvider {
     typealias Entry = WeeklyPomodoroEntry
     
+    /// Get the start of the current week (Monday at 00:00:00)
+    /// This explicitly calculates Monday regardless of calendar's firstWeekday setting
+    private func getStartOfCurrentWeek(calendar: Calendar, from date: Date) -> Date {
+        let today = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: today)
+        // Calendar weekday: 1=Sunday, 2=Monday, ..., 7=Saturday
+        // Calculate days back to Monday (0 = Monday, 6 = Sunday)
+        let daysFromMonday = (weekday == 1) ? 6 : weekday - 2
+        return calendar.date(byAdding: .day, value: -daysFromMonday, to: today) ?? today
+    }
+    
+    /// Check if a date is within the current week (Monday-Sunday)
+    private func isDateInCurrentWeek(_ date: Date, calendar: Calendar) -> Bool {
+        let now = Date()
+        let startOfCurrentWeek = getStartOfCurrentWeek(calendar: calendar, from: now)
+        let endOfCurrentWeek = calendar.date(byAdding: .day, value: 6, to: startOfCurrentWeek)!
+        let endOfWeekEndOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: endOfCurrentWeek) ?? endOfCurrentWeek
+        return date >= startOfCurrentWeek && date <= endOfWeekEndOfDay
+    }
+    
     func placeholder(in context: Context) -> WeeklyPomodoroEntry {
         WeeklyPomodoroEntry(
             date: Date(),
@@ -51,13 +71,31 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
     
     func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> Void) {
         let entry = loadEntry()
-        
-        // Update at midnight to refresh for new day
         let calendar = Calendar.current
         let now = Date()
+        
+        // Calculate next refresh times
+        // 1. Refresh at midnight tonight
         let tomorrow = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: now)!)
         
-        let timeline = Timeline(entries: [entry], policy: .after(tomorrow))
+        // 2. Refresh at start of next week (Monday at 00:00:00)
+        let startOfCurrentWeek = getStartOfCurrentWeek(calendar: calendar, from: now)
+        let startOfNextWeek = calendar.date(byAdding: .day, value: 7, to: startOfCurrentWeek)!
+        
+        // Use whichever comes first: midnight or start of next week
+        let nextRefresh = min(tomorrow, startOfNextWeek)
+        
+        // Create timeline entry for now
+        var entries: [Entry] = [entry]
+        
+        // If next week starts before tomorrow, also add an entry for midnight
+        // This ensures the widget updates at both boundaries
+        if startOfNextWeek > tomorrow {
+            // Add midnight entry (will show current week data until next week starts)
+            entries.append(entry)
+        }
+        
+        let timeline = Timeline(entries: entries, policy: .after(nextRefresh))
         completion(timeline)
     }
     
@@ -65,6 +103,7 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
         // App Group identifier - must match WidgetDataManager
         let appGroupIdentifier = "group.com.forcingfunction.shared"
         let defaults = UserDefaults(suiteName: appGroupIdentifier)
+        let calendar = Calendar.current
         
         guard let data = defaults?.data(forKey: "weeklyWidgetData") else {
             // Return empty entry if no data
@@ -87,6 +126,20 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
                 weeklyGoalMinutes: 1200,
                 dailyTotals: [0, 0, 0, 0, 0, 0, 0],
                 accentColor: "Red"
+            )
+        }
+        
+        // Check if the data is stale (from a previous week)
+        // If lastUpdated is not in the current week, return empty data for current week
+        if !isDateInCurrentWeek(widgetData.lastUpdated, calendar: calendar) {
+            // Data is from a previous week - return empty entry for current week
+            // The app will recalculate when a new session completes
+            return WeeklyPomodoroEntry(
+                date: Date(),
+                currentWeekTotalMinutes: 0,
+                weeklyGoalMinutes: widgetData.weeklyGoalMinutes, // Keep the goal setting
+                dailyTotals: [0, 0, 0, 0, 0, 0, 0],
+                accentColor: widgetData.accentColor // Keep the accent color
             )
         }
         
@@ -138,14 +191,14 @@ struct WeeklyPomodoroWidgetEntryView: View {
                 ZStack {
                     // Background circle
                     Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 12)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 8)
                     
                     // Progress circle
                     Circle()
                         .trim(from: 0, to: progress)
                         .stroke(
                             accentColor,
-                            style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
                         .animation(.linear, value: progress)
@@ -157,7 +210,7 @@ struct WeeklyPomodoroWidgetEntryView: View {
                                 .foregroundColor(.white)
                         }
                 }
-                .frame(width: 100, height: 100)
+                .frame(width: 120, height: 120)
             }
             
             // Right: Weekly Goal and Daily Breakdown
@@ -170,20 +223,20 @@ struct WeeklyPomodoroWidgetEntryView: View {
                 Spacer()
                 
                 // Daily bars
-                HStack(alignment: .bottom, spacing: 4) {
+                HStack(alignment: .bottom, spacing: 8) {
                     ForEach(0..<7) { index in
                         VStack(spacing: 2) {
                     // Bar
                     let dailyMinutes = entry.dailyTotals[index]
-                    let maxBarHeight: CGFloat = 30.0
-                    let minBarHeight: CGFloat = 2.0
+                    let maxBarHeight: CGFloat = 36.0
+                    let minBarHeight: CGFloat = 2.4
                     let barHeight = maxDailyTotal > 0 
                         ? max(minBarHeight, CGFloat(dailyMinutes) / CGFloat(maxDailyTotal) * maxBarHeight)
                         : minBarHeight
                     
                     RoundedRectangle(cornerRadius: 2)
                         .fill(dailyMinutes > 0 ? accentColor : Color.gray.opacity(0.3))
-                        .frame(width: 8, height: barHeight)
+                        .frame(width: 9.6, height: barHeight)
                             
                             // Day label
                             Text(dayAbbreviation(index))
