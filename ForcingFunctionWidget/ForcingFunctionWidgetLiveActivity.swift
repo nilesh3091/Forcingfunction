@@ -33,25 +33,32 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: ForcingFunctionWidgetAttributes.self) { context in
             // Lock screen/banner UI goes here
-            HStack(spacing: 12) {
-                // Session type icon/indicator
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(context.state.sessionType)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    // Session type icon/indicator
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(context.state.sessionType)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        
+                        Text(context.state.timerState == "running" ? "Running" : "Paused")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
                     
-                    Text(context.state.timerState == "running" ? "Running" : "Paused")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                    Spacer()
+                    
+                    // Timer display - calculate from startTime if running, otherwise use remainingSeconds
+                    Text(formatTime(calculateRemainingSeconds(context: context)))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundColor(.primary)
                 }
                 
-                Spacer()
-                
-                // Timer display - calculate from startTime if running, otherwise use remainingSeconds
-                Text(formatTime(calculateRemainingSeconds(context: context)))
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundColor(.primary)
+                // Horizontal progress bar
+                ProgressView(value: progress(context: context))
+                    .tint(.blue)
+                    .progressViewStyle(.linear)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -84,10 +91,16 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             } compactLeading: {
-                // Compact leading: Session type icon or initial
-                Text(String(context.state.sessionType.prefix(1)))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.primary)
+                // Compact leading: Circular progress indicator
+                ZStack {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.2), lineWidth: 2.5)
+                    Circle()
+                        .trim(from: 0, to: progress(context: context))
+                        .stroke(Color.primary, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 16, height: 16)
             } compactTrailing: {
                 // Compact trailing: Remaining time
                 Text(formatTime(calculateRemainingSeconds(context: context)))
