@@ -129,6 +129,19 @@ struct SettingsView: View {
                                 .foregroundColor(.white)
                         }
                         .tint(viewModel.accentColor)
+                        
+                        // Live Activities
+                        Toggle(isOn: $viewModel.liveActivitiesEnabled) {
+                            Text("Live Activities")
+                                .foregroundColor(.white)
+                        }
+                        .tint(viewModel.accentColor)
+                        .onChange(of: viewModel.liveActivitiesEnabled) { enabled in
+                            if !enabled {
+                                // End any active Live Activity when disabled
+                                LiveActivityManager.shared.endActivity()
+                            }
+                        }
                     }
                     .listRowBackground(Color.gray.opacity(0.1))
                     

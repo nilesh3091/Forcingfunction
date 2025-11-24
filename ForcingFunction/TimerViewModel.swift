@@ -30,7 +30,17 @@ class TimerViewModel: ObservableObject {
     @AppStorage("autoStartNext") var autoStartNext: Bool = false
     @AppStorage("playSoundOnCompletion") var playSoundOnCompletion: Bool = true
     @AppStorage("hapticsEnabled") var hapticsEnabled: Bool = true
+    @AppStorage("liveActivitiesEnabled") var liveActivitiesEnabled: Bool = true
     @AppStorage("themeColor") var themeColorString: String = ThemeColor.red.rawValue
+    
+    // MARK: - Timer State Persistence (using @AppStorage)
+    @AppStorage("savedTimerState") private var savedTimerStateRaw: String = ""
+    @AppStorage("savedStartTime") private var savedStartTimeTimestamp: Double = 0
+    @AppStorage("savedOriginalDurationSeconds") private var savedOriginalDurationSeconds: Int = 0
+    @AppStorage("savedPausedDuration") private var savedPausedDuration: Double = 0
+    @AppStorage("savedPauseStartTime") private var savedPauseStartTimeTimestamp: Double = 0
+    @AppStorage("savedSelectedMinutes") private var savedSelectedMinutes: Double = 25.0
+    @AppStorage("savedSessionType") private var savedSessionTypeRaw: String = "Work"
     
     // MARK: - Private Properties
     private var timer: Timer?
@@ -140,6 +150,9 @@ class TimerViewModel: ObservableObject {
         
         // Set up app lifecycle observers
         setupLifecycleObservers()
+        
+        // Restore timer state from disk if available
+        restoreTimerState()
     }
     
     // MARK: - Statistics Loading
@@ -177,14 +190,16 @@ class TimerViewModel: ObservableObject {
                 dataStore.updateSession(session)
             }
             
-            // Resume: Update Live Activity to running state
-            liveActivityManager.updateActivity(
-                remainingSeconds: remainingSeconds,
-                timerState: .running,
-                sessionType: currentSessionType,
-                startTime: startTime ?? now,
-                pausedDuration: pausedDuration
-            )
+            // Resume: Update Live Activity to running state (if enabled)
+            if liveActivitiesEnabled {
+                liveActivityManager.updateActivity(
+                    remainingSeconds: remainingSeconds,
+                    timerState: .running,
+                    sessionType: currentSessionType,
+                    startTime: startTime ?? now,
+                    pausedDuration: pausedDuration
+                )
+            }
         } else {
             // Start new session
             remainingSeconds = Int(selectedMinutes * 60)
@@ -206,24 +221,31 @@ class TimerViewModel: ObservableObject {
             dataStore.addSession(newSession)
             isAutoStartingNext = false // Reset flag after use
             
-            // Start Live Activity for new session
-            liveActivityManager.startActivity(
-                sessionId: newSession.id,
-                sessionType: currentSessionType,
-                totalDurationSeconds: originalDurationSeconds,
-                remainingSeconds: remainingSeconds,
-                startTime: now,
-                pausedDuration: 0
-            )
+            // Start Live Activity for new session (if enabled)
+            if liveActivitiesEnabled {
+                liveActivityManager.startActivity(
+                    sessionId: newSession.id,
+                    sessionType: currentSessionType,
+                    totalDurationSeconds: originalDurationSeconds,
+                    remainingSeconds: remainingSeconds,
+                    startTime: now,
+                    pausedDuration: 0
+                )
+            }
         }
         
         timerState = .running
         startTime = now
         
-        // Start background task for Live Activity updates
-        backgroundTaskManager.startBackgroundUpdates { [weak self] in
-            guard let self = self, self.timerState == .running else { return }
-            self.updateLiveActivityInBackground()
+        // Save timer state to disk
+        saveTimerState()
+        
+        // Start background task for Live Activity updates (if enabled)
+        if liveActivitiesEnabled {
+            backgroundTaskManager.startBackgroundUpdates { [weak self] in
+                guard let self = self, self.timerState == .running else { return }
+                self.updateLiveActivityInBackground()
+            }
         }
         
         if hapticsEnabled {
@@ -257,14 +279,19 @@ class TimerViewModel: ObservableObject {
         // Stop background updates when paused
         backgroundTaskManager.stopBackgroundUpdates()
         
-        // Update Live Activity to paused state
-        liveActivityManager.updateActivity(
-            remainingSeconds: remainingSeconds,
-            timerState: .paused,
-            sessionType: currentSessionType,
-            startTime: startTime ?? Date(),
-            pausedDuration: pausedDuration
-        )
+        // Update Live Activity to paused state (if enabled)
+        if liveActivitiesEnabled {
+            liveActivityManager.updateActivity(
+                remainingSeconds: remainingSeconds,
+                timerState: .paused,
+                sessionType: currentSessionType,
+                startTime: startTime ?? Date(),
+                pausedDuration: pausedDuration
+            )
+        }
+        
+        // Save timer state to disk
+        saveTimerState()
         
         if hapticsEnabled {
             HapticManager.playImpact(style: .light)
@@ -298,8 +325,13 @@ class TimerViewModel: ObservableObject {
         // Stop background updates
         backgroundTaskManager.stopBackgroundUpdates()
         
-        // End Live Activity
-        liveActivityManager.endActivity()
+        // End Live Activity (if enabled)
+        if liveActivitiesEnabled {
+            liveActivityManager.endActivity()
+        }
+        
+        // Clear saved timer state
+        clearTimerState()
         
         if hapticsEnabled {
             HapticManager.playSelection()
@@ -348,8 +380,13 @@ class TimerViewModel: ObservableObject {
         // Stop background updates
         backgroundTaskManager.stopBackgroundUpdates()
         
-        // End Live Activity
-        liveActivityManager.endActivity()
+        // End Live Activity (if enabled)
+        if liveActivitiesEnabled {
+            liveActivityManager.endActivity()
+        }
+        
+        // Clear saved timer state
+        clearTimerState()
         
         // Auto-start next session if enabled
         if autoStartNext {
@@ -456,14 +493,16 @@ class TimerViewModel: ObservableObject {
         // Calculate remaining seconds
         remainingSeconds = max(0, originalDurationSeconds - Int(elapsed))
         
-        // Update Live Activity
-        liveActivityManager.updateActivity(
-            remainingSeconds: remainingSeconds,
-            timerState: .running,
-            sessionType: currentSessionType,
-            startTime: startTime ?? Date(),
-            pausedDuration: pausedDuration
-        )
+        // Update Live Activity (if enabled)
+        if liveActivitiesEnabled {
+            liveActivityManager.updateActivity(
+                remainingSeconds: remainingSeconds,
+                timerState: .running,
+                sessionType: currentSessionType,
+                startTime: startTime ?? Date(),
+                pausedDuration: pausedDuration
+            )
+        }
         
         if remainingSeconds <= 0 {
             endSession()
@@ -472,6 +511,7 @@ class TimerViewModel: ObservableObject {
     
     /// Update Live Activity from background task
     private func updateLiveActivityInBackground() {
+        guard liveActivitiesEnabled else { return }
         guard timerState == .running, let startTime = startTime else { return }
         
         let now = Date()
@@ -508,11 +548,24 @@ class TimerViewModel: ObservableObject {
                 self?.syncTimerState()
             }
             .store(in: &cancellables)
+        
+        // Observe when app goes to background - save state
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .sink { [weak self] _ in
+                self?.saveTimerState()
+            }
+            .store(in: &cancellables)
     }
     
     func syncTimerState() {
-        // Only sync if timer is running
-        guard timerState == .running else { return }
+        // First, try to restore state from disk if we don't have it in memory
+        if timerState == .idle && !savedTimerStateRaw.isEmpty {
+            restoreTimerState()
+            return
+        }
+        
+        // Only sync if timer is running or paused
+        guard timerState == .running || timerState == .paused else { return }
         guard let startTime = startTime else { return }
         
         let now = Date()
@@ -538,8 +591,8 @@ class TimerViewModel: ObservableObject {
             return
         }
         
-        // Restart timer if it's not running (app was backgrounded)
-        if timer == nil {
+        // Restart timer if it's not running (app was backgrounded) and timer was running
+        if timer == nil && timerState == .running {
             startTimerTicking()
             // Reschedule notification with updated remaining time
             scheduleNotification()
@@ -609,6 +662,148 @@ class TimerViewModel: ObservableObject {
                 selectedMinutes = clampedMinutes
                 remainingSeconds = Int(selectedMinutes * 60)
                 pausedSeconds = remainingSeconds
+            }
+        }
+    }
+    
+    // MARK: - Timer State Persistence
+    
+    /// Save current timer state to disk
+    private func saveTimerState() {
+        if timerState == .running || timerState == .paused {
+            savedTimerStateRaw = timerState == .running ? "running" : "paused"
+            savedStartTimeTimestamp = startTime?.timeIntervalSince1970 ?? 0
+            savedOriginalDurationSeconds = originalDurationSeconds
+            savedPausedDuration = pausedDuration
+            savedPauseStartTimeTimestamp = pauseStartTime?.timeIntervalSince1970 ?? 0
+            savedSelectedMinutes = selectedMinutes
+            savedSessionTypeRaw = currentSessionType.rawValue
+        } else {
+            clearTimerState()
+        }
+    }
+    
+    /// Clear saved timer state from disk
+    private func clearTimerState() {
+        savedTimerStateRaw = ""
+        savedStartTimeTimestamp = 0
+        savedOriginalDurationSeconds = 0
+        savedPausedDuration = 0
+        savedPauseStartTimeTimestamp = 0
+        savedSelectedMinutes = 25.0
+        savedSessionTypeRaw = "Work"
+    }
+    
+    /// Restore timer state from disk
+    private func restoreTimerState() {
+        // Only restore if we have saved state
+        guard !savedTimerStateRaw.isEmpty else { return }
+        guard savedStartTimeTimestamp > 0 else { return }
+        guard savedOriginalDurationSeconds > 0 else { return }
+        
+        // Restore basic properties
+        selectedMinutes = savedSelectedMinutes
+        originalDurationSeconds = savedOriginalDurationSeconds
+        pausedDuration = savedPausedDuration
+        startTime = Date(timeIntervalSince1970: savedStartTimeTimestamp)
+        
+        // Restore session type
+        if let sessionType = SessionType(rawValue: savedSessionTypeRaw) {
+            currentSessionType = sessionType
+        }
+        
+        // Restore pause start time if paused
+        if savedPauseStartTimeTimestamp > 0 {
+            pauseStartTime = Date(timeIntervalSince1970: savedPauseStartTimeTimestamp)
+        }
+        
+        // Calculate remaining time
+        let now = Date()
+        var elapsed = now.timeIntervalSince(startTime!)
+        elapsed -= pausedDuration
+        
+        if let pauseStart = pauseStartTime {
+            elapsed -= now.timeIntervalSince(pauseStart)
+        }
+        
+        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
+        remainingSeconds = calculatedRemaining
+        pausedSeconds = calculatedRemaining
+        
+        // Restore timer state
+        if savedTimerStateRaw == "running" {
+            timerState = .running
+            
+            // If timer should have completed, end the session
+            if calculatedRemaining <= 0 {
+                endSession()
+                return
+            }
+            
+            // Restart the timer
+            startTimerTicking()
+            scheduleNotification()
+            
+            // Restart background updates
+            backgroundTaskManager.startBackgroundUpdates { [weak self] in
+                guard let self = self, self.timerState == .running else { return }
+                self.updateLiveActivityInBackground()
+            }
+            
+            // Restart Live Activity if needed (if enabled)
+            if liveActivitiesEnabled {
+                if !liveActivityManager.hasActiveActivity {
+                    let newSession = PomodoroSession(
+                        sessionType: currentSessionType,
+                        startTime: startTime!,
+                        plannedDurationMinutes: selectedMinutes,
+                        status: .running,
+                        events: [SessionEvent(timestamp: startTime!, eventType: .started)],
+                        wasAutoStarted: false
+                    )
+                    currentSession = newSession
+                    dataStore.addSession(newSession)
+                    
+                    liveActivityManager.startActivity(
+                        sessionId: newSession.id,
+                        sessionType: currentSessionType,
+                        totalDurationSeconds: originalDurationSeconds,
+                        remainingSeconds: remainingSeconds,
+                        startTime: startTime!,
+                        pausedDuration: pausedDuration
+                    )
+                } else {
+                    // Update existing Live Activity
+                    liveActivityManager.updateActivity(
+                        remainingSeconds: remainingSeconds,
+                        timerState: .running,
+                        sessionType: currentSessionType,
+                        startTime: startTime!,
+                        pausedDuration: pausedDuration
+                    )
+                }
+            }
+        } else if savedTimerStateRaw == "paused" {
+            timerState = .paused
+            
+            // Try to find matching session from data store by start time
+            let matchingSessions = dataStore.getAllSessions().filter { session in
+                abs(session.startTime.timeIntervalSince(startTime!)) < 1.0 &&
+                (session.status == .running || session.status == .paused)
+            }
+            if let session = matchingSessions.first {
+                currentSession = session
+            }
+            
+            // Update Live Activity if it exists (if enabled)
+            if liveActivitiesEnabled && liveActivityManager.hasActiveActivity {
+                liveActivityManager.updateActivity(
+                    remainingSeconds: remainingSeconds,
+                    timerState: .paused,
+                    sessionType: currentSessionType,
+                    startTime: startTime!,
+                    pausedDuration: pausedDuration
+                )
             }
         }
     }
