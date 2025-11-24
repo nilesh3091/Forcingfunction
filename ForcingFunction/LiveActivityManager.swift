@@ -96,7 +96,8 @@ class LiveActivityManager {
         startTime: Date,
         pausedDuration: TimeInterval
     ) {
-        guard let activity = currentActivity else {
+        // Try to get current activity, or find an existing one
+        guard let activity = getCurrentActivity() else {
             print("LiveActivityManager: No active Live Activity to update")
             return
         }
@@ -208,7 +209,8 @@ class LiveActivityManager {
         updateTimer?.invalidate()
         updateTimer = nil
         
-        guard let activity = currentActivity else {
+        // Try to get current activity, or find an existing one
+        guard let activity = getCurrentActivity() else {
             return
         }
         
@@ -221,11 +223,119 @@ class LiveActivityManager {
         print("LiveActivityManager: Ended Live Activity")
     }
     
+    /// End all existing activities (cleanup method)
+    func endAllActivities() {
+        guard #available(iOS 16.1, *) else { return }
+        
+        let activities = Activity<ForcingFunctionWidgetAttributes>.activities
+        for activity in activities {
+            Task {
+                await activity.end(dismissalPolicy: .immediate)
+            }
+        }
+        
+        currentActivity = nil
+        pushToken = nil
+        print("LiveActivityManager: Ended all Live Activities")
+    }
+    
+    // MARK: - Find Existing Activity
+    
+    /// Find an existing Live Activity by sessionId
+    /// This is useful when the app restores state and needs to reconnect to an existing activity
+    private func findExistingActivity(sessionId: UUID) -> Activity<ForcingFunctionWidgetAttributes>? {
+        guard #available(iOS 16.1, *) else { return nil }
+        
+        let sessionIdString = sessionId.uuidString
+        let activities = Activity<ForcingFunctionWidgetAttributes>.activities
+        
+        // Find activity matching the sessionId
+        return activities.first { activity in
+            activity.attributes.sessionId == sessionIdString
+        }
+    }
+    
+    /// Reconnect to an existing activity or start a new one
+    /// This method checks for existing activities before creating a new one
+    func reconnectOrStartActivity(
+        sessionId: UUID,
+        sessionType: SessionType,
+        totalDurationSeconds: Int,
+        remainingSeconds: Int,
+        startTime: Date,
+        pausedDuration: TimeInterval = 0,
+        timerState: TimerState = .running
+    ) {
+        guard isAvailable() else {
+            print("LiveActivityManager: Live Activities not available")
+            return
+        }
+        
+        // First, try to find an existing activity for this session
+        if let existingActivity = findExistingActivity(sessionId: sessionId) {
+            print("LiveActivityManager: Found existing Live Activity for session \(sessionId.uuidString), reconnecting...")
+            currentActivity = existingActivity
+            
+            // Update the existing activity with current state
+            updateActivity(
+                remainingSeconds: remainingSeconds,
+                timerState: timerState,
+                sessionType: sessionType,
+                startTime: startTime,
+                pausedDuration: pausedDuration
+            )
+            
+            // Re-setup push token monitoring
+            Task {
+                for await tokenData in existingActivity.pushTokenUpdates {
+                    self.pushToken = tokenData
+                    print("LiveActivityManager: Received push token: \(tokenData.map { String(format: "%02x", $0) }.joined())")
+                }
+            }
+            
+            return
+        }
+        
+        // No existing activity found, start a new one
+        print("LiveActivityManager: No existing activity found, starting new one...")
+        startActivity(
+            sessionId: sessionId,
+            sessionType: sessionType,
+            totalDurationSeconds: totalDurationSeconds,
+            remainingSeconds: remainingSeconds,
+            startTime: startTime,
+            pausedDuration: pausedDuration
+        )
+    }
+    
     // MARK: - Check Activity State
     
-    /// Check if there's an active Live Activity
+    /// Check if there's an active Live Activity (either tracked or existing)
     var hasActiveActivity: Bool {
-        return currentActivity != nil
+        if currentActivity != nil {
+            return true
+        }
+        
+        // Also check if there are any existing activities
+        guard #available(iOS 16.1, *) else { return false }
+        return !Activity<ForcingFunctionWidgetAttributes>.activities.isEmpty
+    }
+    
+    /// Get the current activity, or try to find an existing one
+    private func getCurrentActivity() -> Activity<ForcingFunctionWidgetAttributes>? {
+        if let activity = currentActivity {
+            return activity
+        }
+        
+        // Try to find any existing activity
+        guard #available(iOS 16.1, *) else { return nil }
+        let activities = Activity<ForcingFunctionWidgetAttributes>.activities
+        if let firstActivity = activities.first {
+            currentActivity = firstActivity
+            return firstActivity
+        }
+        
+        return nil
     }
 }
 

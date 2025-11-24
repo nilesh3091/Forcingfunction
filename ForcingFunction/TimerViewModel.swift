@@ -763,35 +763,41 @@ class TimerViewModel: ObservableObject {
             
             // Restart Live Activity if needed (if enabled)
             if liveActivitiesEnabled {
-                if !liveActivityManager.hasActiveActivity {
-                    let newSession = PomodoroSession(
-                        sessionType: currentSessionType,
-                        startTime: startTime!,
-                        plannedDurationMinutes: selectedMinutes,
-                        status: .running,
-                        events: [SessionEvent(timestamp: startTime!, eventType: .started)],
-                        wasAutoStarted: false,
-                        categoryId: selectedCategoryId
-                    )
-                    currentSession = newSession
-                    dataStore.addSession(newSession)
-                    
-                    liveActivityManager.startActivity(
-                        sessionId: newSession.id,
+                // Try to find or create the session first
+                if currentSession == nil {
+                    // Try to find matching session from data store by start time
+                    let matchingSessions = dataStore.getAllSessions().filter { session in
+                        abs(session.startTime.timeIntervalSince(startTime!)) < 1.0 &&
+                        (session.status == .running || session.status == .paused)
+                    }
+                    if let session = matchingSessions.first {
+                        currentSession = session
+                    } else {
+                        // Create new session if none found
+                        let newSession = PomodoroSession(
+                            sessionType: currentSessionType,
+                            startTime: startTime!,
+                            plannedDurationMinutes: selectedMinutes,
+                            status: .running,
+                            events: [SessionEvent(timestamp: startTime!, eventType: .started)],
+                            wasAutoStarted: false,
+                            categoryId: selectedCategoryId
+                        )
+                        currentSession = newSession
+                        dataStore.addSession(newSession)
+                    }
+                }
+                
+                // Use reconnectOrStartActivity which will find existing or create new
+                if let session = currentSession {
+                    liveActivityManager.reconnectOrStartActivity(
+                        sessionId: session.id,
                         sessionType: currentSessionType,
                         totalDurationSeconds: originalDurationSeconds,
                         remainingSeconds: remainingSeconds,
                         startTime: startTime!,
-                        pausedDuration: pausedDuration
-                    )
-                } else {
-                    // Update existing Live Activity
-                    liveActivityManager.updateActivity(
-                        remainingSeconds: remainingSeconds,
-                        timerState: .running,
-                        sessionType: currentSessionType,
-                        startTime: startTime!,
-                        pausedDuration: pausedDuration
+                        pausedDuration: pausedDuration,
+                        timerState: .running
                     )
                 }
             }
@@ -807,15 +813,28 @@ class TimerViewModel: ObservableObject {
                 currentSession = session
             }
             
-            // Update Live Activity if it exists (if enabled)
-            if liveActivitiesEnabled && liveActivityManager.hasActiveActivity {
-                liveActivityManager.updateActivity(
-                    remainingSeconds: remainingSeconds,
-                    timerState: .paused,
-                    sessionType: currentSessionType,
-                    startTime: startTime!,
-                    pausedDuration: pausedDuration
-                )
+            // Reconnect or update Live Activity (if enabled)
+            if liveActivitiesEnabled {
+                if let session = currentSession {
+                    liveActivityManager.reconnectOrStartActivity(
+                        sessionId: session.id,
+                        sessionType: currentSessionType,
+                        totalDurationSeconds: originalDurationSeconds,
+                        remainingSeconds: remainingSeconds,
+                        startTime: startTime!,
+                        pausedDuration: pausedDuration,
+                        timerState: .paused
+                    )
+                } else if liveActivityManager.hasActiveActivity {
+                    // Fallback: update existing activity if we don't have session info
+                    liveActivityManager.updateActivity(
+                        remainingSeconds: remainingSeconds,
+                        timerState: .paused,
+                        sessionType: currentSessionType,
+                        startTime: startTime!,
+                        pausedDuration: pausedDuration
+                    )
+                }
             }
         }
     }
