@@ -145,6 +145,20 @@ struct SettingsView: View {
                     }
                     .listRowBackground(Color.gray.opacity(0.1))
                     
+                    Section(header: Text("Categories").foregroundColor(.white.opacity(0.7))) {
+                        NavigationLink(destination: CategoryManagementView(accentColor: viewModel.accentColor)) {
+                            HStack {
+                                Text("Manage Categories")
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text("\(CategoryManager.shared.getActiveCount())/\(CategoryManager.shared.getMaxActiveCategories())")
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .font(.subheadline)
+                            }
+                        }
+                    }
+                    .listRowBackground(Color.gray.opacity(0.1))
+                    
                     Section(header: Text("Appearance").foregroundColor(.white.opacity(0.7))) {
                         // Theme color
                         HStack {

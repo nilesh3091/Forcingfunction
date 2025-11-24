@@ -177,6 +177,9 @@ struct StatsView: View {
                                 icon: "checkmark.circle.fill",
                                 color: viewModel.accentColor
                             )
+                            
+                            // Category Breakdown
+                            CategoryBreakdownView(accentColor: viewModel.accentColor)
                         }
                         .padding(.top, 8)
                     }
@@ -368,6 +371,162 @@ struct GoalPickerView: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Category Breakdown View
+
+struct CategoryBreakdownView: View {
+    let accentColor: Color
+    
+    private let categoryManager = CategoryManager.shared
+    private let dataStore = PomodoroDataStore.shared
+    
+    private var categoryStats: [(category: Category?, minutes: Int, sessionCount: Int, isArchived: Bool)] {
+        let allSessions = dataStore.getCompletedWorkSessions()
+        var categoryMinutes: [UUID: (minutes: Double, count: Int)] = [:]
+        var noCategoryMinutes: Double = 0
+        var noCategoryCount: Int = 0
+        
+        // Calculate stats per category
+        for session in allSessions {
+            if let categoryId = session.categoryId {
+                let duration = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
+                if let existing = categoryMinutes[categoryId] {
+                    categoryMinutes[categoryId] = (existing.minutes + duration, existing.count + 1)
+                } else {
+                    categoryMinutes[categoryId] = (duration, 1)
+                }
+            } else {
+                let duration = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
+                noCategoryMinutes += duration
+                noCategoryCount += 1
+            }
+        }
+        
+        // Build result array
+        var results: [(category: Category?, minutes: Int, sessionCount: Int, isArchived: Bool)] = []
+        
+        // Add categories with sessions
+        for (categoryId, stats) in categoryMinutes {
+            if let category = categoryManager.getCategory(byId: categoryId) {
+                results.append((
+                    category: category,
+                    minutes: Int(stats.minutes),
+                    sessionCount: stats.count,
+                    isArchived: category.isArchived
+                ))
+            }
+        }
+        
+        // Add "No Category" if there are sessions without categories
+        if noCategoryCount > 0 {
+            results.append((
+                category: nil,
+                minutes: Int(noCategoryMinutes),
+                sessionCount: noCategoryCount,
+                isArchived: false
+            ))
+        }
+        
+        // Sort: active categories first (alphabetically), then archived (alphabetically), then "No Category" last
+        return results.sorted { first, second in
+            if first.isArchived != second.isArchived {
+                return !first.isArchived // Active first
+            }
+            if first.category == nil {
+                return false // "No Category" always last
+            }
+            if second.category == nil {
+                return true
+            }
+            // Alphabetical by name
+            return (first.category?.name ?? "").localizedCaseInsensitiveCompare(second.category?.name ?? "") == .orderedAscending
+        }
+    }
+    
+    var body: some View {
+        let stats = categoryStats
+        
+        if !stats.isEmpty {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Category Breakdown")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                
+                ForEach(Array(stats.enumerated()), id: \.offset) { index, stat in
+                    CategoryStatRow(
+                        category: stat.category,
+                        minutes: stat.minutes,
+                        sessionCount: stat.sessionCount,
+                        isArchived: stat.isArchived,
+                        accentColor: accentColor
+                    )
+                    .padding(.horizontal, 20)
+                }
+            }
+            .padding(.top, 8)
+        }
+    }
+}
+
+struct CategoryStatRow: View {
+    let category: Category?
+    let minutes: Int
+    let sessionCount: Int
+    let isArchived: Bool
+    let accentColor: Color
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Color indicator
+            if let category = category {
+                Circle()
+                    .fill(isArchived ? category.color.color.opacity(0.4) : category.color.color)
+                    .frame(width: 24, height: 24)
+            } else {
+                Circle()
+                    .fill(Color.gray.opacity(0.5))
+                    .frame(width: 24, height: 24)
+            }
+            
+            // Category name and stats
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Text(category?.name ?? "No Category")
+                        .font(.headline)
+                        .foregroundColor(isArchived ? .white.opacity(0.6) : .white)
+                    
+                    if isArchived {
+                        Text("(Archived)")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                }
+                
+                HStack(spacing: 8) {
+                    Text(AngleUtilities.formatFocusTime(minutes))
+                        .font(.subheadline)
+                        .foregroundColor(isArchived ? accentColor.opacity(0.6) : accentColor)
+                    
+                    Text("•")
+                        .foregroundColor(.white.opacity(0.4))
+                    
+                    Text("\(sessionCount) session\(sessionCount == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(isArchived ? 0.4 : 0.6))
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(isArchived ? 0.05 : 0.1))
+        )
     }
 }
 

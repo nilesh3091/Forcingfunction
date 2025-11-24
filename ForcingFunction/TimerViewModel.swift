@@ -19,6 +19,16 @@ class TimerViewModel: ObservableObject {
     @Published var currentSessionType: SessionType = .work
     @Published var completedPomodoros: Int = 0
     @Published var totalFocusMinutes: Int = 0
+    @AppStorage("selectedCategoryId") var selectedCategoryIdString: String = ""
+    
+    var selectedCategoryId: UUID? {
+        get {
+            UUID(uuidString: selectedCategoryIdString)
+        }
+        set {
+            selectedCategoryIdString = newValue?.uuidString ?? ""
+        }
+    }
     
     // MARK: - Settings (using @AppStorage)
     @AppStorage("pomodoroMinutes") var pomodoroMinutes: Double = AppSettings.defaultPomodoroMinutes
@@ -215,7 +225,8 @@ class TimerViewModel: ObservableObject {
                 plannedDurationMinutes: selectedMinutes,
                 status: .running,
                 events: [SessionEvent(timestamp: now, eventType: .started)],
-                wasAutoStarted: isAutoStartingNext
+                wasAutoStarted: isAutoStartingNext,
+                categoryId: selectedCategoryId
             )
             currentSession = newSession
             dataStore.addSession(newSession)
@@ -759,7 +770,8 @@ class TimerViewModel: ObservableObject {
                         plannedDurationMinutes: selectedMinutes,
                         status: .running,
                         events: [SessionEvent(timestamp: startTime!, eventType: .started)],
-                        wasAutoStarted: false
+                        wasAutoStarted: false,
+                        categoryId: selectedCategoryId
                     )
                     currentSession = newSession
                     dataStore.addSession(newSession)

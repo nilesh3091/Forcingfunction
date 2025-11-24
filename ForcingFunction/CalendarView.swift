@@ -337,6 +337,17 @@ struct PomodoroSessionCard: View {
     let accentColor: Color
     
     private let calendar = Calendar.current
+    private let categoryManager = CategoryManager.shared
+    
+    private var category: Category? {
+        guard let categoryId = session.categoryId else { return nil }
+        return categoryManager.getCategory(byId: categoryId)
+    }
+    
+    private var isCategoryArchived: Bool {
+        guard let category = category else { return false }
+        return category.isArchived
+    }
     
     private var durationString: String {
         if let activeDuration = session.activeDurationMinutes {
@@ -420,6 +431,24 @@ struct PomodoroSessionCard: View {
                     Text("Work")
                         .font(.headline)
                         .foregroundColor(.white)
+                    
+                    // Category badge
+                    if let category = category {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(isCategoryArchived ? category.color.color.opacity(0.4) : category.color.color)
+                                .frame(width: 8, height: 8)
+                            Text(category.name)
+                                .font(.caption)
+                                .foregroundColor(isCategoryArchived ? .white.opacity(0.5) : .white.opacity(0.8))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(isCategoryArchived ? Color.gray.opacity(0.1) : category.color.color.opacity(0.2))
+                        )
+                    }
                     
                     Spacer()
                     

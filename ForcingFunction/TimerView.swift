@@ -108,6 +108,10 @@ struct TimerView: View {
                                 .frame(width: 6, height: 6)
                         }
                     }
+                    
+                    // Category picker
+                    CategoryPickerView(viewModel: viewModel)
+                        .padding(.top, 12)
                 }
                 .padding(.top, 20)
                 
@@ -608,6 +612,98 @@ struct SweptAreaView: View {
             }
         }
         .frame(width: dialSize, height: dialSize)
+    }
+}
+
+// MARK: - Category Picker View
+
+struct CategoryPickerView: View {
+    @ObservedObject var viewModel: TimerViewModel
+    
+    private let categoryManager = CategoryManager.shared
+    
+    private var isDisabled: Bool {
+        viewModel.timerState != .idle
+    }
+    
+    private var activeCategories: [Category] {
+        categoryManager.getActiveCategories()
+    }
+    
+    private var selectedCategory: Category? {
+        guard let id = viewModel.selectedCategoryId else { return nil }
+        return categoryManager.getCategory(byId: id)
+    }
+    
+    var body: some View {
+        Menu {
+            // No Category option
+            Button(action: {
+                viewModel.selectedCategoryId = nil
+            }) {
+                HStack {
+                    Circle()
+                        .fill(Color.gray.opacity(0.5))
+                        .frame(width: 12, height: 12)
+                    Text("No Category")
+                    if viewModel.selectedCategoryId == nil {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            .disabled(isDisabled)
+            
+            if !activeCategories.isEmpty {
+                Divider()
+                
+                // Active categories
+                ForEach(activeCategories) { category in
+                    Button(action: {
+                        viewModel.selectedCategoryId = category.id
+                    }) {
+                        HStack {
+                            Circle()
+                                .fill(category.color.color)
+                                .frame(width: 12, height: 12)
+                            Text(category.name)
+                            if viewModel.selectedCategoryId == category.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    .disabled(isDisabled)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                if let category = selectedCategory {
+                    Circle()
+                        .fill(isDisabled ? category.color.color.opacity(0.5) : category.color.color)
+                        .frame(width: 16, height: 16)
+                    Text(category.name)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(isDisabled ? .white.opacity(0.5) : .white)
+                } else {
+                    Circle()
+                        .fill(Color.gray.opacity(isDisabled ? 0.3 : 0.5))
+                        .frame(width: 16, height: 16)
+                    Text("No Category")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(isDisabled ? .white.opacity(0.4) : .white.opacity(0.7))
+                }
+                
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(isDisabled ? .white.opacity(0.3) : .white.opacity(0.6))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.gray.opacity(isDisabled ? 0.08 : 0.15))
+            )
+        }
+        .disabled(isDisabled)
     }
 }
 

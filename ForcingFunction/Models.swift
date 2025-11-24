@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 /// Represents the type of session in the Pomodoro cycle
 enum SessionType: String, CaseIterable, Codable {
@@ -75,6 +76,63 @@ enum SessionStatus: String, Codable {
     case cancelled
 }
 
+// MARK: - Category Models
+
+/// Color options for categories
+enum CategoryColor: String, CaseIterable, Codable {
+    case red = "Red"
+    case blue = "Blue"
+    case green = "Green"
+    case orange = "Orange"
+    case purple = "Purple"
+    case pink = "Pink"
+    case teal = "Teal"
+    case yellow = "Yellow"
+    case indigo = "Indigo"
+    case gray = "Gray"
+    
+    var color: Color {
+        switch self {
+        case .red: return .red
+        case .blue: return .blue
+        case .green: return .green
+        case .orange: return .orange
+        case .purple: return .purple
+        case .pink: return .pink
+        case .teal: return .teal
+        case .yellow: return .yellow
+        case .indigo: return .indigo
+        case .gray: return .gray
+        }
+    }
+}
+
+/// Represents a category for pomodoro sessions
+struct Category: Codable, Identifiable {
+    let id: UUID
+    var name: String
+    var color: CategoryColor
+    let createdDate: Date
+    var isArchived: Bool
+    var archivedDate: Date?
+    
+    init(
+        id: UUID = UUID(),
+        name: String,
+        color: CategoryColor,
+        createdDate: Date = Date(),
+        isArchived: Bool = false,
+        archivedDate: Date? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.createdDate = createdDate
+        self.isArchived = isArchived
+        self.archivedDate = archivedDate
+    }
+}
+
 /// Represents a complete pomodoro session with all its data
 struct PomodoroSession: Codable, Identifiable {
     let id: UUID
@@ -85,6 +143,7 @@ struct PomodoroSession: Codable, Identifiable {
     var status: SessionStatus
     var events: [SessionEvent]
     let wasAutoStarted: Bool
+    var categoryId: UUID?
     
     /// Computed actual duration in minutes (nil if session hasn't ended)
     var actualDurationMinutes: Double? {
@@ -125,7 +184,8 @@ struct PomodoroSession: Codable, Identifiable {
         plannedDurationMinutes: Double,
         status: SessionStatus = .running,
         events: [SessionEvent] = [],
-        wasAutoStarted: Bool = false
+        wasAutoStarted: Bool = false,
+        categoryId: UUID? = nil
     ) {
         self.id = id
         self.sessionType = sessionType
@@ -135,6 +195,7 @@ struct PomodoroSession: Codable, Identifiable {
         self.status = status
         self.events = events
         self.wasAutoStarted = wasAutoStarted
+        self.categoryId = categoryId
     }
 }
 
