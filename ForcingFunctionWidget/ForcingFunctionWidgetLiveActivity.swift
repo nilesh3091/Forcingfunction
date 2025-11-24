@@ -9,46 +9,65 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-// Separate view for Dynamic Island compact trailing to ensure it recalculates
+// MARK: - Shared Helper Functions
+
+/// Format seconds as MM:SS string
+private func formatTime(_ totalSeconds: Int) -> String {
+    let minutes = totalSeconds / 60
+    let seconds = totalSeconds % 60
+    return String(format: "%d:%02d", minutes, seconds)
+}
+
+/// Calculate remaining seconds from timer state
+/// If paused, returns stored remainingSeconds. If running, calculates from startTime.
+private func calculateRemainingSeconds(from context: ActivityViewContext<ForcingFunctionWidgetAttributes>) -> Int {
+    // If paused, use the stored remainingSeconds
+    if context.state.timerState == "paused" {
+        return context.state.remainingSeconds
+    }
+    
+    // If running, calculate from startTime
+    let now = Date()
+    let elapsed = now.timeIntervalSince(context.state.startTime)
+    let adjustedElapsed = elapsed - context.state.pausedDuration
+    let calculatedRemaining = max(0, context.attributes.totalDurationSeconds - Int(adjustedElapsed))
+    
+    return calculatedRemaining
+}
+
+/// Calculate progress (0.0 to 1.0) from timer state
+private func calculateProgress(from context: ActivityViewContext<ForcingFunctionWidgetAttributes>) -> Double {
+    guard context.attributes.totalDurationSeconds > 0 else { return 0 }
+    let remaining = calculateRemainingSeconds(from: context)
+    let elapsed = context.attributes.totalDurationSeconds - remaining
+    return min(1.0, max(0.0, Double(elapsed) / Double(context.attributes.totalDurationSeconds)))
+}
+
+// MARK: - Dynamic Island Views
+
+/// Compact trailing view showing timer text
 struct CompactTimerView: View {
     let context: ActivityViewContext<ForcingFunctionWidgetAttributes>
     
     var body: some View {
-        Text(formatTime(calculateRemainingSeconds()))
+        Text(formatTime(calculateRemainingSeconds(from: context)))
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(.primary)
     }
-    
-    private func formatTime(_ totalSeconds: Int) -> String {
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-    
-    private func calculateRemainingSeconds() -> Int {
-        // If paused, use the stored remainingSeconds
-        if context.state.timerState == "paused" {
-            return context.state.remainingSeconds
-        }
-        
-        // If running, calculate from startTime
-        let now = Date()
-        let elapsed = now.timeIntervalSince(context.state.startTime)
-        let adjustedElapsed = elapsed - context.state.pausedDuration
-        let calculatedRemaining = max(0, context.attributes.totalDurationSeconds - Int(adjustedElapsed))
-        
-        return calculatedRemaining
-    }
 }
 
-// Separate view for Dynamic Island compact leading to show appropriate icon with progress ring
+/// Compact leading view showing progress ring icon
 struct CompactSessionIconView: View {
     let context: ActivityViewContext<ForcingFunctionWidgetAttributes>
     
+    private var progress: Double {
+        calculateProgress(from: context)
+    }
+    
     var body: some View {
         ZStack {
-            // Circular progress ring
+            // Circular progress ring background
             Circle()
                 .stroke(
                     Color.secondary.opacity(0.2),
@@ -66,28 +85,6 @@ struct CompactSessionIconView: View {
                 .animation(.linear(duration: 0.3), value: progress)
         }
         .frame(width: 20, height: 20)
-    }
-    
-    private var progress: Double {
-        guard context.attributes.totalDurationSeconds > 0 else { return 0 }
-        let remaining = calculateRemainingSeconds()
-        let elapsed = context.attributes.totalDurationSeconds - remaining
-        return min(1.0, max(0.0, Double(elapsed) / Double(context.attributes.totalDurationSeconds)))
-    }
-    
-    private func calculateRemainingSeconds() -> Int {
-        // If paused, use the stored remainingSeconds
-        if context.state.timerState == "paused" {
-            return context.state.remainingSeconds
-        }
-        
-        // If running, calculate from startTime
-        let now = Date()
-        let elapsed = now.timeIntervalSince(context.state.startTime)
-        let adjustedElapsed = elapsed - context.state.pausedDuration
-        let calculatedRemaining = max(0, context.attributes.totalDurationSeconds - Int(adjustedElapsed))
-        
-        return calculatedRemaining
     }
 }
 
@@ -129,8 +126,8 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                 
                 Spacer()
                 
-                // Timer display - calculate from startTime if running, otherwise use remainingSeconds
-                Text(formatTime(calculateRemainingSeconds(context: context)))
+                // Timer display
+                Text(formatTime(calculateRemainingSeconds(from: context)))
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundColor(.primary)
@@ -154,26 +151,21 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    // Progress indicator could go here
-                    ProgressView(value: progress(context: context))
+                    ProgressView(value: calculateProgress(from: context))
                         .tint(.blue)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(formatTime(calculateRemainingSeconds(context: context)))
+                    Text(formatTime(calculateRemainingSeconds(from: context)))
                         .font(.system(size: 36, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             } compactLeading: {
-                // Compact leading: Session type icon with progress ring
                 CompactSessionIconView(context: context)
             } compactTrailing: {
-                // Compact trailing: Remaining time
-                // Use a view that forces recalculation on each render
                 CompactTimerView(context: context)
             } minimal: {
-                // Minimal: Just a timer icon or dot
                 Image(systemName: "timer")
                     .font(.system(size: 12))
                     .foregroundStyle(.primary)
@@ -181,40 +173,6 @@ struct ForcingFunctionWidgetLiveActivity: Widget {
             .widgetURL(URL(string: "forcingfunction://timer"))
             .keylineTint(Color.blue)
         }
-    }
-    
-    // Helper function to format time as MM:SS
-    private func formatTime(_ totalSeconds: Int) -> String {
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-    
-    // Helper function to calculate progress (0.0 to 1.0)
-    private func progress(context: ActivityViewContext<ForcingFunctionWidgetAttributes>) -> Double {
-        guard context.attributes.totalDurationSeconds > 0 else { return 0 }
-        let remaining = calculateRemainingSeconds(context: context)
-        let elapsed = context.attributes.totalDurationSeconds - remaining
-        return Double(elapsed) / Double(context.attributes.totalDurationSeconds)
-    }
-    
-    // Helper function to calculate remaining seconds from startTime if timer is running
-    // Falls back to remainingSeconds if paused or if calculation fails
-    private func calculateRemainingSeconds(context: ActivityViewContext<ForcingFunctionWidgetAttributes>) -> Int {
-        // If paused, use the stored remainingSeconds
-        if context.state.timerState == "paused" {
-            return context.state.remainingSeconds
-        }
-        
-        // If running, calculate from startTime
-        let now = Date()
-        let elapsed = now.timeIntervalSince(context.state.startTime)
-        let adjustedElapsed = elapsed - context.state.pausedDuration
-        let calculatedRemaining = max(0, context.attributes.totalDurationSeconds - Int(adjustedElapsed))
-        
-        // Use calculated time if it's reasonable (within 1 second of stored value or more accurate)
-        // This ensures the widget stays accurate even if updates stop
-        return calculatedRemaining
     }
 }
 
