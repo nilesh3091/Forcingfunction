@@ -208,18 +208,24 @@ struct WeeklyPomodoroWidgetEntryView: View {
                         .rotationEffect(.degrees(-90))
                         .animation(.linear, value: progress)
                     
-                        // Percentage (main) and time (secondary)
-                        VStack(spacing: 2) {
-                            Text("\(Int(completionPercentage * 100))%")
-                                .font(.system(size: 26, weight: .medium, design: .rounded))
-                                .foregroundColor(.white)
-                            
+                    // Content inside ring: percentage centered, time at bottom
+                    ZStack {
+                        // Percentage centered - thinner font weight
+                        Text("\(Int(completionPercentage * 100))%")
+                            .font(.system(size: 32, weight: .medium, design: .default))
+                            .foregroundColor(.white)
+                        
+                        // Time at bottom - keep at same position
+                        VStack {
+                            Spacer()
                             Text(formatTime(entry.currentWeekTotalMinutes))
-                                .font(.system(size: 13, weight: .regular, design: .rounded))
+                                .font(.system(size: 11, weight: .regular, design: .rounded))
                                 .foregroundColor(.white.opacity(0.7))
+                                .padding(.bottom, 18)
                         }
+                    }
                 }
-                .frame(width: 110, height: 110)
+                .frame(width: 125, height: 125)
             }
             
             // Right: Weekly Goal and Daily Breakdown
