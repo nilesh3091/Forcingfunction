@@ -189,8 +189,8 @@ struct TimerView: View {
                     
                     // Hand line
                     Rectangle()
-                        .fill(viewModel.accentColor)
-                        .frame(width: 3, height: handLength)
+                        .fill(Color.white)
+                        .frame(width: 5, height: handLength)
                         .offset(y: -handLength / 2)
                         .rotationEffect(.degrees(handAngle))
                         .animation(isDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: handAngle)
