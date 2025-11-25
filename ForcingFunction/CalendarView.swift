@@ -10,7 +10,9 @@ import SwiftUI
 struct CalendarView: View {
     @ObservedObject var viewModel: TimerViewModel
     @State private var currentMonth: Date = Date()
-    @State private var selectedDate: Date? = nil
+    @State private var selectedDate: Date? = Date() // Default to today
+    @State private var isCalendarExpanded: Bool = false
+    @State private var refreshTrigger: UUID = UUID()
     
     private let dataStore = PomodoroDataStore.shared
     private let calendar = Calendar.current
@@ -46,20 +48,44 @@ struct CalendarView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Calendar Grid
-                    CalendarGridView(
-                        currentMonth: $currentMonth,
-                        selectedDate: $selectedDate,
-                        datesWithSessions: datesWithSessions,
-                        accentColor: viewModel.accentColor
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-                    
-                    Divider()
-                        .background(Color.gray.opacity(0.3))
-                        .padding(.vertical, 12)
+                    // Calendar Grid (Collapsible)
+                    Group {
+                        if isCalendarExpanded {
+                            VStack(spacing: 0) {
+                                CalendarGridView(
+                                    currentMonth: $currentMonth,
+                                    selectedDate: $selectedDate,
+                                    datesWithSessions: datesWithSessions,
+                                    accentColor: viewModel.accentColor
+                                )
+                                .padding(.horizontal, 20)
+                                .padding(.top, 12)
+                                .padding(.bottom, 8)
+                                
+                                Divider()
+                                    .background(Color.gray.opacity(0.3))
+                                    .padding(.vertical, 12)
+                            }
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        } else {
+                            // Compact Calendar Header (when collapsed)
+                            CompactCalendarHeader(
+                                currentMonth: $currentMonth,
+                                selectedDate: $selectedDate,
+                                datesWithSessions: datesWithSessions,
+                                accentColor: viewModel.accentColor,
+                                onExpand: {
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                        isCalendarExpanded = true
+                                    }
+                                }
+                            )
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isCalendarExpanded)
                     
                     // Sessions List
                     if filteredSessions.isEmpty {
@@ -72,68 +98,102 @@ struct CalendarView: View {
                             Text(selectedDate == nil ? "No sessions yet" : "No sessions on this day")
                                 .font(.headline)
                                 .foregroundColor(.white.opacity(0.7))
-                            
-                            if selectedDate != nil {
-                                Button("Show All Sessions") {
-                                    selectedDate = nil
-                                }
-                                .font(.subheadline)
-                                .foregroundColor(viewModel.accentColor)
-                                .padding(.top, 8)
-                            }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.top, 60)
                     } else {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 16) {
-                                // Header
-                                HStack {
-                                    if let selectedDate = selectedDate {
-                                        Text(formatSelectedDateHeader(selectedDate))
+                        VStack(spacing: 0) {
+                            // Header with Dropdown
+                            HStack {
+                                Menu {
+                                    Button(action: {
+                                        selectedDate = Date() // Today
+                                    }) {
+                                        HStack {
+                                            Text("Today")
+                                            if let selectedDate = selectedDate, calendar.isDateInToday(selectedDate) {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                    
+                                    Button(action: {
+                                        selectedDate = nil // All Sessions
+                                    }) {
+                                        HStack {
+                                            Text("All Sessions")
+                                            if selectedDate == nil {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(selectedDate == nil ? "All Sessions" : formatSelectedDateHeader(selectedDate!))
                                             .font(.title2)
                                             .fontWeight(.bold)
                                             .foregroundColor(.white)
                                         
-                                        Button(action: {
-                                            self.selectedDate = nil
-                                        }) {
-                                            Text("Show All")
-                                                .font(.subheadline)
-                                                .foregroundColor(viewModel.accentColor)
-                                        }
-                                    } else {
-                                        Text("All Sessions")
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.7))
                                     }
-                                    
-                                    Spacer()
-                                    
-                                    Text("\(filteredSessions.count) session\(filteredSessions.count == 1 ? "" : "s")")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white.opacity(0.6))
                                 }
-                                .padding(.horizontal, 20)
-                                .padding(.top, 8)
                                 
-                                // Session Cards
+                                Spacer()
+                                
+                                Text("\(filteredSessions.count) session\(filteredSessions.count == 1 ? "" : "s")")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
+                            .padding(.bottom, 12)
+                            
+                            // Session Cards List
+                            List {
                                 ForEach(filteredSessions) { session in
                                     PomodoroSessionCard(
                                         session: session,
                                         accentColor: viewModel.accentColor
                                     )
-                                    .padding(.horizontal, 20)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 16, trailing: 20))
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        if session.status == .cancelled {
+                                            Button(role: .destructive) {
+                                                deleteSession(session)
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
+                                    }
                                 }
+                                .id(refreshTrigger)
                             }
-                            .padding(.bottom, 40)
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .background(Color.black)
                         }
                     }
                 }
             }
             .navigationTitle("Calendar")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            isCalendarExpanded.toggle()
+                        }
+                    }) {
+                        Image(systemName: isCalendarExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(viewModel.accentColor)
+                    }
+                }
+            }
         }
     }
     
@@ -147,6 +207,12 @@ struct CalendarView: View {
             formatter.dateFormat = "EEEE, MMM d"
             return formatter.string(from: date)
         }
+    }
+    
+    private func deleteSession(_ session: PomodoroSession) {
+        dataStore.deleteSession(byId: session.id)
+        // Trigger view refresh
+        refreshTrigger = UUID()
     }
 }
 
@@ -276,6 +342,84 @@ struct CalendarGridView: View {
                             .frame(height: 32)
                     }
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Compact Calendar Header
+
+struct CompactCalendarHeader: View {
+    @Binding var currentMonth: Date
+    @Binding var selectedDate: Date?
+    let datesWithSessions: Set<Date>
+    let accentColor: Color
+    let onExpand: () -> Void
+    
+    private let calendar = Calendar.current
+    
+    private var monthYearString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter.string(from: currentMonth)
+    }
+    
+    private var selectedDateString: String {
+        guard let selectedDate = selectedDate else { return "" }
+        if calendar.isDateInToday(selectedDate) {
+            return "Today"
+        } else if calendar.isDateInYesterday(selectedDate) {
+            return "Yesterday"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: selectedDate)
+        }
+    }
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(monthYearString)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    if let selectedDate = selectedDate {
+                        Text("•")
+                            .foregroundColor(.white.opacity(0.5))
+                        
+                        Text(selectedDateString)
+                            .font(.subheadline)
+                            .foregroundColor(accentColor)
+                    }
+                }
+                
+                if !datesWithSessions.isEmpty {
+                    Text("\(datesWithSessions.count) day\(datesWithSessions.count == 1 ? "" : "s") with sessions")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+            
+            Spacer()
+            
+            Button(action: onExpand) {
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 14, weight: .medium))
+                    Text("Show Calendar")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(accentColor)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(accentColor.opacity(0.15))
+                )
             }
         }
     }

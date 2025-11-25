@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import Combine
 
 // Extension to create darker/lighter shades of a color while maintaining full opacity
 extension Color {
@@ -52,6 +53,9 @@ struct TimerView: View {
     @State private var lastHapticMajorTick: Int = -1  // Track last 5-minute mark for haptic feedback
     @State private var lastHapticTime: Date = Date()  // Throttle continuous feedback
     
+    // Day progress tracking
+    @State private var dayProgress: Double = 0.0  // 0.0 to 1.0 (0% to 100%)
+    
     // Haptic feedback helper functions
     private func triggerSelectionHaptic() {
         let generator = UISelectionFeedbackGenerator()
@@ -63,6 +67,157 @@ struct TimerView: View {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.prepare()
         generator.impactOccurred()
+    }
+    
+    // Day progress calculation
+    private func calculateDayProgress() -> Double {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Get start of today (midnight) - returns non-optional Date
+        let startOfDay = calendar.startOfDay(for: now)
+        
+        // Get start of next day (next midnight)
+        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0.0 }
+        
+        // Calculate elapsed time since midnight
+        let elapsed = now.timeIntervalSince(startOfDay)
+        
+        // Calculate total time in the day (24 hours)
+        let totalDayDuration = startOfNextDay.timeIntervalSince(startOfDay)
+        
+        // Calculate progress (0.0 to 1.0)
+        let progress = elapsed / totalDayDuration
+        return min(1.0, max(0.0, progress))
+    }
+    
+    private func updateDayProgress() {
+        dayProgress = calculateDayProgress()
+    }
+    
+    // Calculate today's total focus time in minutes
+    private func getTodayFocusMinutes() -> Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
+        
+        let dataStore = PomodoroDataStore.shared
+        let allSessions = dataStore.getAllSessions()
+        
+        let todaySessions = allSessions.filter { session in
+            session.sessionType == .work &&
+            session.status == .completed &&
+            session.startTime >= startOfDay &&
+            session.startTime < startOfNextDay
+        }
+        
+        var totalMinutes: Double = 0
+        for session in todaySessions {
+            if let activeDuration = session.activeDurationMinutes {
+                totalMinutes += activeDuration
+            } else if let actualDuration = session.actualDurationMinutes {
+                totalMinutes += actualDuration
+            } else if let endTime = session.endTime {
+                totalMinutes += (endTime.timeIntervalSince(session.startTime) / 60.0)
+            } else {
+                totalMinutes += session.plannedDurationMinutes
+            }
+        }
+        
+        return Int(totalMinutes)
+    }
+    
+    // Format focus time for display (e.g., "3H 32M" or "45M")
+    private func formatTodayFocusTime() -> String {
+        let totalMinutes = getTodayFocusMinutes()
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        
+        if hours > 0 {
+            return "\(hours)H \(minutes)M"
+        } else {
+            return "\(minutes)M"
+        }
+    }
+    
+    // Get today's completed work sessions
+    private func getTodayCompletedWorkSessions() -> [PomodoroSession] {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
+        
+        let dataStore = PomodoroDataStore.shared
+        let allSessions = dataStore.getAllSessions()
+        
+        return allSessions.filter { session in
+            // Only completed work sessions
+            session.sessionType == .work &&
+            session.status == .completed &&
+            // Started today
+            session.startTime >= startOfDay &&
+            session.startTime < startOfNextDay
+        }
+    }
+    
+    // Calculate day progress position for a given time
+    private func calculateDayProgressPosition(for date: Date) -> Double {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0.0 }
+        
+        // Use endTime if available, otherwise startTime
+        let sessionTime = date
+        
+        // Calculate elapsed time since midnight
+        let elapsed = sessionTime.timeIntervalSince(startOfDay)
+        
+        // Calculate total time in the day (24 hours)
+        let totalDayDuration = startOfNextDay.timeIntervalSince(startOfDay)
+        
+        // Calculate progress (0.0 to 1.0)
+        let progress = elapsed / totalDayDuration
+        return min(1.0, max(0.0, progress))
+    }
+    
+    // Group sessions that are close together for stacking
+    private func groupSessionsForStacking(_ sessions: [PomodoroSession], threshold: Double = 0.01) -> [[PomodoroSession]] {
+        // Sort sessions by completion time
+        let sortedSessions = sessions.sorted { session1, session2 in
+            let time1 = session1.endTime ?? session1.startTime
+            let time2 = session2.endTime ?? session2.startTime
+            return time1 < time2
+        }
+        
+        var groups: [[PomodoroSession]] = []
+        var currentGroup: [PomodoroSession] = []
+        var lastPosition: Double = -1.0
+        
+        for session in sortedSessions {
+            let sessionTime = session.endTime ?? session.startTime
+            let position = calculateDayProgressPosition(for: sessionTime)
+            
+            // If this session is close to the last one (within threshold), add to current group
+            if lastPosition >= 0 && abs(position - lastPosition) < threshold {
+                currentGroup.append(session)
+            } else {
+                // Start a new group
+                if !currentGroup.isEmpty {
+                    groups.append(currentGroup)
+                }
+                currentGroup = [session]
+            }
+            lastPosition = position
+        }
+        
+        // Add the last group
+        if !currentGroup.isEmpty {
+            groups.append(currentGroup)
+        }
+        
+        return groups
     }
     
     // Dial geometry
@@ -95,19 +250,50 @@ struct TimerView: View {
                 Spacer()
                 
                 // Main heading
-                VStack(spacing: 8) {
-                    Text("What's your focus?")
-                        .font(.system(size: 32, weight: .bold))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your day :")
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 20)
                     
-                    // Progress dots (placeholder - can be enhanced)
-                    HStack(spacing: 6) {
-                        ForEach(0..<10) { index in
-                            Circle()
-                                .fill(index < 2 ? viewModel.accentColor : Color.gray.opacity(0.3))
-                                .frame(width: 6, height: 6)
+                    // Day progress bar
+                    VStack(spacing: 6) {
+                        HStack {
+                            Text("\(Int(dayProgress * 100))%")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                            
+                            Spacer()
+                            
+                            Text(formatTodayFocusTime())
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
                         }
+                        
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                // Background bar
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(Color.white.opacity(0.2))
+                                    .frame(height: 10)
+                                
+                                // Progress bar
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(viewModel.accentColor)
+                                    .frame(width: geometry.size.width * dayProgress, height: 10)
+                                    .animation(.linear(duration: 60.0), value: dayProgress)
+                                
+                                // Green blocks for completed work sessions
+                                SessionBlocksOverlay(
+                                    geometry: geometry,
+                                    dayProgress: dayProgress
+                                )
+                            }
+                        }
+                        .frame(height: 10)
                     }
+                    .padding(.horizontal, 20)
                     
                     // Category picker
                     CategoryPickerView(viewModel: viewModel)
@@ -420,6 +606,10 @@ struct TimerView: View {
         .onAppear {
             viewModel.updateSettings()
             viewModel.syncTimerState()
+            updateDayProgress()
+        }
+        .onReceive(Timer.publish(every: 60.0, on: .main, in: .common).autoconnect()) { _ in
+            updateDayProgress()
         }
     }
 }
@@ -612,6 +802,148 @@ struct SweptAreaView: View {
             }
         }
         .frame(width: dialSize, height: dialSize)
+    }
+}
+
+// MARK: - Session Blocks View
+
+struct SessionBlocksOverlay: View {
+    let geometry: GeometryProxy
+    let dayProgress: Double
+    
+    private var todaySessions: [PomodoroSession] {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
+        
+        let dataStore = PomodoroDataStore.shared
+        let allSessions = dataStore.getAllSessions()
+        
+        return allSessions.filter { session in
+            session.sessionType == .work &&
+            session.status == .completed &&
+            session.startTime >= startOfDay &&
+            session.startTime < startOfNextDay
+        }
+    }
+    
+    private func calculateDayProgressPosition(for date: Date) -> Double {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0.0 }
+        
+        let elapsed = date.timeIntervalSince(startOfDay)
+        let totalDayDuration = startOfNextDay.timeIntervalSince(startOfDay)
+        let progress = elapsed / totalDayDuration
+        return min(1.0, max(0.0, progress))
+    }
+    
+    private func groupSessionsForStacking(_ sessions: [PomodoroSession], threshold: Double = 0.01) -> [[PomodoroSession]] {
+        let sortedSessions = sessions.sorted { session1, session2 in
+            let time1 = session1.endTime ?? session1.startTime
+            let time2 = session2.endTime ?? session2.startTime
+            return time1 < time2
+        }
+        
+        var groups: [[PomodoroSession]] = []
+        var currentGroup: [PomodoroSession] = []
+        var lastPosition: Double = -1.0
+        
+        for session in sortedSessions {
+            let sessionTime = session.endTime ?? session.startTime
+            let position = calculateDayProgressPosition(for: sessionTime)
+            
+            if lastPosition >= 0 && abs(position - lastPosition) < threshold {
+                currentGroup.append(session)
+            } else {
+                if !currentGroup.isEmpty {
+                    groups.append(currentGroup)
+                }
+                currentGroup = [session]
+            }
+            lastPosition = position
+        }
+        
+        if !currentGroup.isEmpty {
+            groups.append(currentGroup)
+        }
+        
+        return groups
+    }
+    
+    private func calculateBlockWidth(for session: PomodoroSession) -> CGFloat {
+        // Use the same logic as CalendarView for consistency
+        // Priority: activeDuration > actualDuration > plannedDuration
+        let durationMinutes: Double
+        
+        if let activeDuration = session.activeDurationMinutes {
+            durationMinutes = activeDuration
+        } else if let actualDuration = session.actualDurationMinutes {
+            durationMinutes = actualDuration
+        } else {
+            // Fallback: calculate from startTime to endTime if available
+            if let endTime = session.endTime {
+                durationMinutes = (endTime.timeIntervalSince(session.startTime) / 60.0)
+            } else {
+                durationMinutes = session.plannedDurationMinutes
+            }
+        }
+        
+        // Linear scale: 1 point per 5 minutes
+        // Minimum: 2pt, Maximum: 10pt
+        let calculatedWidth = durationMinutes / 5.0
+        let clampedWidth = max(2.0, min(10.0, calculatedWidth))
+        
+        #if DEBUG
+        print("Session - planned: \(session.plannedDurationMinutes)min, actual: \(session.actualDurationMinutes?.description ?? "nil"), active: \(session.activeDurationMinutes?.description ?? "nil"), calculated: \(durationMinutes)min, width: \(clampedWidth)pt")
+        #endif
+        
+        return CGFloat(clampedWidth)
+    }
+    
+    var body: some View {
+        let sessionGroups = groupSessionsForStacking(todaySessions, threshold: 0.015)
+        
+        ForEach(Array(sessionGroups.enumerated()), id: \.offset) { groupIndex, group in
+            // Render each session individually with its own width and position
+            // Add slight offset for stacking when sessions are grouped together
+            ForEach(Array(group.enumerated()), id: \.element.id) { sessionIndex, session in
+                let sessionTime = session.endTime ?? session.startTime
+                let basePosition = calculateDayProgressPosition(for: sessionTime)
+                
+                // Calculate offset for stacking (spread out slightly if multiple in group)
+                let stackOffset: Double = group.count > 1 ? (Double(sessionIndex) - Double(group.count - 1) / 2.0) * 0.002 : 0.0
+                let position = basePosition + stackOffset
+                
+                if position <= dayProgress {
+                    SessionBlockView(
+                        geometry: geometry,
+                        session: session,
+                        position: position,
+                        blockWidth: calculateBlockWidth(for: session)
+                    )
+                }
+            }
+        }
+    }
+}
+
+struct SessionBlockView: View {
+    let geometry: GeometryProxy
+    let session: PomodoroSession
+    let position: Double
+    let blockWidth: CGFloat
+    
+    var body: some View {
+        // Center the block at the completion time position
+        let xPosition = geometry.size.width * position
+        
+        RoundedRectangle(cornerRadius: 1)
+            .fill(Color.green)
+            .frame(width: blockWidth, height: 10)
+            .offset(x: xPosition - blockWidth / 2, y: 0)
     }
 }
 
