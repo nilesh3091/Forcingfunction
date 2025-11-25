@@ -62,9 +62,10 @@ class LiveActivityManager {
         )
         
         do {
+            let activityContent = ActivityContent(state: initialState, staleDate: nil)
             let activity = try Activity<ForcingFunctionWidgetAttributes>.request(
                 attributes: attributes,
-                contentState: initialState,
+                content: activityContent,
                 pushType: .token
             )
             
@@ -121,7 +122,8 @@ class LiveActivityManager {
         )
         
         Task {
-            await activity.update(using: updatedState)
+            let activityContent = ActivityContent(state: updatedState, staleDate: nil)
+            await activity.update(activityContent)
         }
     }
     
@@ -133,7 +135,7 @@ class LiveActivityManager {
         startTime: Date,
         pausedDuration: TimeInterval
     ) {
-        guard let token = pushToken else {
+        guard pushToken != nil else {
             print("LiveActivityManager: No push token available")
             return
         }
@@ -146,12 +148,6 @@ class LiveActivityManager {
             startTime: startTime,
             pausedDuration: pausedDuration
         )
-        
-        // Encode the content state
-        guard let encodedState = try? JSONEncoder().encode(contentState) else {
-            print("LiveActivityManager: Failed to encode content state")
-            return
-        }
         
         // For local-only apps, we'll use ActivityKit's update method directly
         // Push notifications require a server, so we'll use a hybrid approach:
@@ -189,7 +185,8 @@ class LiveActivityManager {
             pausedDuration: pausedDuration
         )
         
-        await activity.update(using: updatedState)
+        let activityContent = ActivityContent(state: updatedState, staleDate: nil)
+        await activity.update(activityContent)
     }
     
     /// Start periodic push updates (every 5 seconds when running)
@@ -215,7 +212,14 @@ class LiveActivityManager {
         }
         
         Task {
-            await activity.end(dismissalPolicy: .immediate)
+            let activityContent = ActivityContent(state: ForcingFunctionWidgetAttributes.ContentState(
+                remainingSeconds: 0,
+                timerState: "completed",
+                sessionType: "",
+                startTime: Date(),
+                pausedDuration: 0
+            ), staleDate: nil)
+            await activity.end(activityContent, dismissalPolicy: .immediate)
         }
         
         currentActivity = nil
@@ -230,7 +234,14 @@ class LiveActivityManager {
         let activities = Activity<ForcingFunctionWidgetAttributes>.activities
         for activity in activities {
             Task {
-                await activity.end(dismissalPolicy: .immediate)
+                let activityContent = ActivityContent(state: ForcingFunctionWidgetAttributes.ContentState(
+                    remainingSeconds: 0,
+                    timerState: "completed",
+                    sessionType: "",
+                    startTime: Date(),
+                    pausedDuration: 0
+                ), staleDate: nil)
+                await activity.end(activityContent, dismissalPolicy: .immediate)
             }
         }
         

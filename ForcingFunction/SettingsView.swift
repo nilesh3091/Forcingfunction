@@ -33,7 +33,7 @@ struct SettingsView: View {
                             }
                             .pickerStyle(.menu)
                             .foregroundColor(viewModel.accentColor)
-                            .onChange(of: viewModel.pomodoroMinutes) {
+                            .onChange(of: viewModel.pomodoroMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
                         }
@@ -50,7 +50,7 @@ struct SettingsView: View {
                             }
                             .pickerStyle(.menu)
                             .foregroundColor(viewModel.accentColor)
-                            .onChange(of: viewModel.shortBreakMinutes) {
+                            .onChange(of: viewModel.shortBreakMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
                         }
@@ -67,7 +67,7 @@ struct SettingsView: View {
                             }
                             .pickerStyle(.menu)
                             .foregroundColor(viewModel.accentColor)
-                            .onChange(of: viewModel.longBreakMinutes) {
+                            .onChange(of: viewModel.longBreakMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
                         }
@@ -136,8 +136,8 @@ struct SettingsView: View {
                                 .foregroundColor(.white)
                         }
                         .tint(viewModel.accentColor)
-                        .onChange(of: viewModel.liveActivitiesEnabled) { enabled in
-                            if !enabled {
+                        .onChange(of: viewModel.liveActivitiesEnabled) { oldValue, newValue in
+                            if !newValue {
                                 // End any active Live Activity when disabled
                                 LiveActivityManager.shared.endActivity()
                             }

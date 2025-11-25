@@ -10,6 +10,7 @@
 		0D51D91C2ED0EAC600D636BF /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D51D91B2ED0EAC600D636BF /* WidgetKit.framework */; };
 		0D51D91E2ED0EAC600D636BF /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D51D91D2ED0EAC600D636BF /* SwiftUI.framework */; };
 		0D51D92D2ED0EAC800D636BF /* ForcingFunctionWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0D51D9192ED0EAC600D636BF /* ForcingFunctionWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		0D83A8F12ED56D0D0021DE53 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D83A8F02ED56D0D0021DE53 /* ActivityKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,6 +56,7 @@
 		0D51D91B2ED0EAC600D636BF /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		0D51D91D2ED0EAC600D636BF /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		0D51D9362ED0EE8B00D636BF /* ForcingFunctionWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ForcingFunctionWidgetExtension.entitlements; sourceTree = "<group>"; };
+		0D83A8F02ED56D0D0021DE53 /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		0D9006F72EC4F797009E1F38 /* ForcingFunction.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ForcingFunction.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D9007062EC4F799009E1F38 /* ForcingFunctionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ForcingFunctionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D9007102EC4F799009E1F38 /* ForcingFunctionUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ForcingFunctionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -111,6 +113,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0D83A8F12ED56D0D0021DE53 /* ActivityKit.framework in Frameworks */,
 				0D51D91E2ED0EAC600D636BF /* SwiftUI.framework in Frameworks */,
 				0D51D91C2ED0EAC600D636BF /* WidgetKit.framework in Frameworks */,
 			);
@@ -143,6 +146,7 @@
 		0D51D91A2ED0EAC600D636BF /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				0D83A8F02ED56D0D0021DE53 /* ActivityKit.framework */,
 				0D51D91B2ED0EAC600D636BF /* WidgetKit.framework */,
 				0D51D91D2ED0EAC600D636BF /* SwiftUI.framework */,
 			);
@@ -410,7 +414,7 @@
 				INFOPLIST_FILE = ForcingFunctionWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ForcingFunctionWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -442,7 +446,7 @@
 				INFOPLIST_FILE = ForcingFunctionWidget/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ForcingFunctionWidget;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -594,12 +598,14 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ForcingFunction/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -629,12 +635,14 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ForcingFunction/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -660,7 +668,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NX76YKXPM7;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -682,7 +690,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NX76YKXPM7;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -703,6 +711,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NX76YKXPM7;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -723,6 +732,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NX76YKXPM7;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = NileshKumar.ForcingFunctionUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";

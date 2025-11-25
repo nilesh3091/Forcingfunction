@@ -510,7 +510,7 @@ class TimerViewModel: ObservableObject {
                 remainingSeconds: remainingSeconds,
                 timerState: .running,
                 sessionType: currentSessionType,
-                startTime: startTime ?? Date(),
+                startTime: startTime,
                 pausedDuration: pausedDuration
             )
         }

@@ -24,6 +24,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 @main
 struct ForcingFunctionApp: App {

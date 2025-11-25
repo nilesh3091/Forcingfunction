@@ -180,37 +180,46 @@ struct WeeklyPomodoroWidgetEntryView: View {
         return min(1.0, Double(entry.currentWeekTotalMinutes) / Double(entry.weeklyGoalMinutes))
     }
     
+    var completionPercentage: Double {
+        guard entry.weeklyGoalMinutes > 0 else { return 0 }
+        return Double(entry.currentWeekTotalMinutes) / Double(entry.weeklyGoalMinutes)
+    }
+    
     var maxDailyTotal: Int {
         entry.dailyTotals.max() ?? 1
     }
     
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 24) {
             // Left: Circular Progress
             VStack {
                 ZStack {
                     // Background circle
                     Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 6)
                     
                     // Progress circle
                     Circle()
                         .trim(from: 0, to: progress)
                         .stroke(
                             accentColor,
-                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 6, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
                         .animation(.linear, value: progress)
                     
-                        // Time text
-                        VStack(spacing: 0) {
-                            Text(formatTime(entry.currentWeekTotalMinutes))
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                        // Percentage (main) and time (secondary)
+                        VStack(spacing: 2) {
+                            Text("\(Int(completionPercentage * 100))%")
+                                .font(.system(size: 26, weight: .medium, design: .rounded))
                                 .foregroundColor(.white)
+                            
+                            Text(formatTime(entry.currentWeekTotalMinutes))
+                                .font(.system(size: 13, weight: .regular, design: .rounded))
+                                .foregroundColor(.white.opacity(0.7))
                         }
                 }
-                .frame(width: 120, height: 120)
+                .frame(width: 110, height: 110)
             }
             
             // Right: Weekly Goal and Daily Breakdown
@@ -226,13 +235,22 @@ struct WeeklyPomodoroWidgetEntryView: View {
                 HStack(alignment: .bottom, spacing: 8) {
                     ForEach(0..<7) { index in
                         VStack(spacing: 2) {
-                    // Bar
+                    // Bar with logarithmic scaling for better visibility of small values
                     let dailyMinutes = entry.dailyTotals[index]
-                    let maxBarHeight: CGFloat = 43.2
-                    let minBarHeight: CGFloat = 2.88
-                    let barHeight = maxDailyTotal > 0 
-                        ? max(minBarHeight, CGFloat(dailyMinutes) / CGFloat(maxDailyTotal) * maxBarHeight)
-                        : minBarHeight
+                    let maxBarHeight: CGFloat = 51.84  // Increased by 20% for more pronounced differences
+                    let minBarHeight: CGFloat = 3.456  // Increased by 20% to maintain proportions
+                    let barHeight: CGFloat = {
+                        if dailyMinutes == 0 {
+                            return minBarHeight
+                        }
+                        guard maxDailyTotal > 0 else { return minBarHeight }
+                        // Logarithmic scaling: log(1 + value) / log(1 + max) * maxHeight
+                        // This compresses large differences, making small values more visible
+                        let logValue = log(1.0 + Double(dailyMinutes))
+                        let logMax = log(1.0 + Double(maxDailyTotal))
+                        let scaledHeight = (logValue / logMax) * maxBarHeight
+                        return max(minBarHeight, scaledHeight)
+                    }()
                     
                     RoundedRectangle(cornerRadius: 2)
                         .fill(dailyMinutes > 0 ? accentColor : Color.gray.opacity(0.3))
