@@ -968,74 +968,110 @@ struct CategoryPickerView: View {
     }
     
     var body: some View {
-        Menu {
-            // No Category option
-            Button(action: {
-                viewModel.selectedCategoryId = nil
-            }) {
-                HStack {
-                    Circle()
-                        .fill(Color.gray.opacity(0.5))
-                        .frame(width: 12, height: 12)
-                    Text("No Category")
-                    if viewModel.selectedCategoryId == nil {
-                        Image(systemName: "checkmark")
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                // No Category chip
+                CategoryChipView(
+                    title: "No Category",
+                    color: .gray,
+                    isSelected: viewModel.selectedCategoryId == nil,
+                    isDisabled: isDisabled,
+                    action: {
+                        guard !isDisabled else { return }
+                        viewModel.selectedCategoryId = nil
                     }
-                }
-            }
-            .disabled(isDisabled)
-            
-            if !activeCategories.isEmpty {
-                Divider()
+                )
                 
-                // Active categories
+                // Category chips
                 ForEach(activeCategories) { category in
-                    Button(action: {
-                        viewModel.selectedCategoryId = category.id
-                    }) {
-                        HStack {
-                            Circle()
-                                .fill(category.color.color)
-                                .frame(width: 12, height: 12)
-                            Text(category.name)
-                            if viewModel.selectedCategoryId == category.id {
-                                Image(systemName: "checkmark")
-                            }
+                    CategoryChipView(
+                        title: category.name,
+                        color: category.color.color,
+                        isSelected: viewModel.selectedCategoryId == category.id,
+                        isDisabled: isDisabled,
+                        action: {
+                            guard !isDisabled else { return }
+                            viewModel.selectedCategoryId = category.id
                         }
-                    }
-                    .disabled(isDisabled)
+                    )
                 }
             }
-        } label: {
-            HStack(spacing: 8) {
-                if let category = selectedCategory {
-                    Circle()
-                        .fill(isDisabled ? category.color.color.opacity(0.5) : category.color.color)
-                        .frame(width: 16, height: 16)
-                    Text(category.name)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(isDisabled ? .white.opacity(0.5) : .white)
-                } else {
-                    Circle()
-                        .fill(Color.gray.opacity(isDisabled ? 0.3 : 0.5))
-                        .frame(width: 16, height: 16)
-                    Text("No Category")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(isDisabled ? .white.opacity(0.4) : .white.opacity(0.7))
-                }
+            .padding(.horizontal, 20)
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.selectedCategoryId)
+    }
+}
+
+struct CategoryChipView: View {
+    let title: String
+    let color: Color
+    let isSelected: Bool
+    let isDisabled: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                // Color indicator circle
+                Circle()
+                    .fill(isDisabled ? color.opacity(0.4) : color)
+                    .frame(width: 10, height: 10)
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                isSelected && !isDisabled
+                                    ? Color.white.opacity(0.4)
+                                    : Color.white.opacity(0.15),
+                                lineWidth: isSelected && !isDisabled ? 1 : 0.5
+                            )
+                    )
+                    .shadow(
+                        color: isSelected && !isDisabled
+                            ? color.opacity(0.6)
+                            : Color.clear,
+                        radius: isSelected && !isDisabled ? 3 : 0
+                    )
                 
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(isDisabled ? .white.opacity(0.3) : .white.opacity(0.6))
+                // Category name
+                Text(title)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(
+                        isDisabled
+                            ? .white.opacity(0.4)
+                            : (isSelected ? .white : .white.opacity(0.8))
+                    )
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(isDisabled ? 0.08 : 0.15))
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(
+                        isSelected && !isDisabled
+                            ? color.opacity(0.2)
+                            : Color.gray.opacity(isDisabled ? 0.08 : 0.12)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(
+                                isSelected && !isDisabled
+                                    ? color.opacity(0.6)
+                                    : Color.gray.opacity(isDisabled ? 0.15 : 0.25),
+                                lineWidth: isSelected && !isDisabled ? 1 : 0.5
+                            )
+                    )
             )
+            .shadow(
+                color: isSelected && !isDisabled
+                    ? color.opacity(0.4)
+                    : Color.clear,
+                radius: isSelected && !isDisabled ? 5 : 0,
+                x: 0,
+                y: 2
+            )
+            .scaleEffect(isSelected && !isDisabled ? 1.05 : 1.0)
         }
         .disabled(isDisabled)
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

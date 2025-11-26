@@ -25,12 +25,16 @@
 
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @main
 struct ForcingFunctionApp: App {
     init() {
         // Initialize widget data on app launch
         WidgetDataManager.shared.updateWidgetData()
+        
+        // Set up notification delegate to handle timer completion in background
+        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
     }
     
     var body: some Scene {

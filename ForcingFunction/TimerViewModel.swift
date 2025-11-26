@@ -161,6 +161,13 @@ class TimerViewModel: ObservableObject {
         // Set up app lifecycle observers
         setupLifecycleObservers()
         
+        // Listen for timer completion notifications from background
+        NotificationCenter.default.publisher(for: .timerCompletedInBackground)
+            .sink { [weak self] _ in
+                self?.checkAndCompleteTimerIfNeeded()
+            }
+            .store(in: &cancellables)
+        
         // Restore timer state from disk if available
         restoreTimerState()
     }
@@ -355,8 +362,25 @@ class TimerViewModel: ObservableObject {
         
         let now = Date()
         
-        // Complete current session
-        if var session = currentSession {
+        // Try to get current session, or find it from data store if nil
+        var sessionToComplete: PomodoroSession?
+        
+        if let session = currentSession {
+            sessionToComplete = session
+        } else {
+            // Try to find the session from data store using saved state
+            // This handles the case where app was backgrounded and currentSession was lost
+            if let startTime = startTime, originalDurationSeconds > 0 {
+                let matchingSessions = dataStore.getAllSessions().filter { session in
+                    abs(session.startTime.timeIntervalSince(startTime)) < 1.0 &&
+                    (session.status == .running || session.status == .paused)
+                }
+                sessionToComplete = matchingSessions.first
+            }
+        }
+        
+        // Complete the session if we found one
+        if var session = sessionToComplete {
             let completeEvent = SessionEvent(timestamp: now, eventType: .completed)
             session.events.append(completeEvent)
             session.endTime = now
@@ -371,6 +395,9 @@ class TimerViewModel: ObservableObject {
             }
             
             currentSession = nil
+        } else {
+            // If we still can't find a session, log a warning
+            print("Warning: endSession() called but no session found to complete")
         }
         
         timerState = .completed
@@ -598,9 +625,14 @@ class TimerViewModel: ObservableObject {
         
         // If timer should have completed, end the session
         if calculatedRemaining <= 0 {
+            // Ensure we have currentSession before ending
+            ensureCurrentSessionExists()
             endSession()
             return
         }
+        
+        // Ensure currentSession exists before continuing
+        ensureCurrentSessionExists()
         
         // Restart timer if it's not running (app was backgrounded) and timer was running
         if timer == nil && timerState == .running {
@@ -612,6 +644,69 @@ class TimerViewModel: ObservableObject {
             backgroundTaskManager.startBackgroundUpdates { [weak self] in
                 guard let self = self, self.timerState == .running else { return }
                 self.updateLiveActivityInBackground()
+            }
+        }
+    }
+    
+    /// Check if timer should be completed and complete it if needed
+    /// Called when notification fires or app becomes active
+    private func checkAndCompleteTimerIfNeeded() {
+        // Only check if timer is running or paused
+        guard timerState == .running || timerState == .paused else { return }
+        guard let startTime = startTime else { return }
+        guard originalDurationSeconds > 0 else { return }
+        
+        let now = Date()
+        var elapsed = now.timeIntervalSince(startTime)
+        elapsed -= pausedDuration
+        
+        if let pauseStart = pauseStartTime {
+            elapsed -= now.timeIntervalSince(pauseStart)
+        }
+        
+        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
+        
+        // If timer should have completed, end the session
+        if calculatedRemaining <= 0 {
+            ensureCurrentSessionExists()
+            endSession()
+        }
+    }
+    
+    /// Ensure currentSession exists by finding it from data store if needed
+    private func ensureCurrentSessionExists() {
+        // If we already have a currentSession, we're good
+        if currentSession != nil {
+            return
+        }
+        
+        // Try to find the session from data store using saved state
+        guard let startTime = startTime, originalDurationSeconds > 0 else { return }
+        
+        let matchingSessions = dataStore.getAllSessions().filter { session in
+            abs(session.startTime.timeIntervalSince(startTime)) < 1.0 &&
+            (session.status == .running || session.status == .paused)
+        }
+        
+        if let session = matchingSessions.first {
+            currentSession = session
+            print("Restored currentSession from data store: \(session.id)")
+        } else {
+            // If we still can't find it, create a new one based on saved state
+            // This handles edge cases where the session was never saved
+            if let sessionType = SessionType(rawValue: savedSessionTypeRaw) {
+                let newSession = PomodoroSession(
+                    sessionType: sessionType,
+                    startTime: startTime,
+                    plannedDurationMinutes: savedSelectedMinutes,
+                    status: timerState == .running ? .running : .paused,
+                    events: [SessionEvent(timestamp: startTime, eventType: .started)],
+                    wasAutoStarted: false,
+                    categoryId: selectedCategoryId
+                )
+                currentSession = newSession
+                dataStore.addSession(newSession)
+                print("Created new session from saved state: \(newSession.id)")
             }
         }
     }
@@ -761,32 +856,11 @@ class TimerViewModel: ObservableObject {
                 self.updateLiveActivityInBackground()
             }
             
+            // Ensure currentSession exists before continuing
+            ensureCurrentSessionExists()
+            
             // Restart Live Activity if needed (if enabled)
             if liveActivitiesEnabled {
-                // Try to find or create the session first
-                if currentSession == nil {
-                    // Try to find matching session from data store by start time
-                    let matchingSessions = dataStore.getAllSessions().filter { session in
-                        abs(session.startTime.timeIntervalSince(startTime!)) < 1.0 &&
-                        (session.status == .running || session.status == .paused)
-                    }
-                    if let session = matchingSessions.first {
-                        currentSession = session
-                    } else {
-                        // Create new session if none found
-                        let newSession = PomodoroSession(
-                            sessionType: currentSessionType,
-                            startTime: startTime!,
-                            plannedDurationMinutes: selectedMinutes,
-                            status: .running,
-                            events: [SessionEvent(timestamp: startTime!, eventType: .started)],
-                            wasAutoStarted: false,
-                            categoryId: selectedCategoryId
-                        )
-                        currentSession = newSession
-                        dataStore.addSession(newSession)
-                    }
-                }
                 
                 // Use reconnectOrStartActivity which will find existing or create new
                 if let session = currentSession {
@@ -804,14 +878,8 @@ class TimerViewModel: ObservableObject {
         } else if savedTimerStateRaw == "paused" {
             timerState = .paused
             
-            // Try to find matching session from data store by start time
-            let matchingSessions = dataStore.getAllSessions().filter { session in
-                abs(session.startTime.timeIntervalSince(startTime!)) < 1.0 &&
-                (session.status == .running || session.status == .paused)
-            }
-            if let session = matchingSessions.first {
-                currentSession = session
-            }
+            // Ensure currentSession exists
+            ensureCurrentSessionExists()
             
             // Reconnect or update Live Activity (if enabled)
             if liveActivitiesEnabled {

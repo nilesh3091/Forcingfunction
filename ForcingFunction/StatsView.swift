@@ -173,11 +173,12 @@ struct StatsView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
-                        // Weekly Goal Card
-                        VStack(alignment: .leading, spacing: 16) {
+                        // Weekly Total Goal Card (Vertical Stack Layout)
+                        VStack(alignment: .leading, spacing: 14) {
+                            // Title and Edit Button Row
                             HStack {
-                                Text("Weekly Goal")
-                                    .font(.title2)
+                                Text("Weekly Total Goal")
+                                    .font(.headline)
                                     .fontWeight(.bold)
                                     .foregroundColor(.white)
                                 
@@ -187,38 +188,40 @@ struct StatsView: View {
                                     showingGoalPicker = true
                                 }) {
                                     Image(systemName: "pencil")
+                                        .font(.subheadline)
                                         .foregroundColor(viewModel.accentColor)
                                 }
                             }
                             
-                            // Progress display
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(alignment: .firstTextBaseline) {
+                            // Time Display Row (Full Width)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
                                     Text(formatTimeGoal(currentWeekCompletedMinutes))
-                                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                                        .font(.system(size: 32, weight: .bold, design: .rounded))
                                         .foregroundColor(viewModel.accentColor)
                                     
                                     Text("/ \(formatTimeGoal(weeklyGoalMinutes))")
-                                        .font(.system(size: 32, weight: .medium))
+                                        .font(.system(size: 20, weight: .medium))
                                         .foregroundColor(.white.opacity(0.7))
-                                    
-                                    Spacer()
                                 }
                                 
                                 Text("focus time this week")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.6))
-                                
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            
+                            // Progress Bar Row (Full Width)
+                            VStack(alignment: .leading, spacing: 6) {
                                 // Progress bar
                                 GeometryReader { geometry in
                                     ZStack(alignment: .leading) {
                                         // Background
-                                        RoundedRectangle(cornerRadius: 8)
+                                        RoundedRectangle(cornerRadius: 6)
                                             .fill(Color.gray.opacity(0.2))
-                                            .frame(height: 12)
+                                            .frame(height: 10)
                                         
                                         // Progress
-                                        RoundedRectangle(cornerRadius: 8)
+                                        RoundedRectangle(cornerRadius: 6)
                                             .fill(
                                                 LinearGradient(
                                                     gradient: Gradient(colors: [
@@ -229,35 +232,38 @@ struct StatsView: View {
                                                     endPoint: .trailing
                                                 )
                                             )
-                                            .frame(width: geometry.size.width * goalProgress, height: 12)
+                                            .frame(width: geometry.size.width * goalProgress, height: 10)
                                             .animation(.spring(response: 0.5, dampingFraction: 0.8), value: goalProgress)
                                     }
                                 }
-                                .frame(height: 12)
+                                .frame(height: 10)
                                 
                                 // Goal status text
-                                if currentWeekCompletedMinutes >= weeklyGoalMinutes {
-                                    HStack {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                        Text("Goal achieved! 🎉")
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.green)
+                                HStack {
+                                    if currentWeekCompletedMinutes >= weeklyGoalMinutes {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.caption)
+                                                .foregroundColor(.green)
+                                            Text("Goal achieved! 🎉")
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.green)
+                                        }
+                                    } else {
+                                        let remaining = weeklyGoalMinutes - currentWeekCompletedMinutes
+                                        Text("\(formatTimeGoal(remaining)) remaining")
+                                            .font(.caption)
+                                            .foregroundColor(.white.opacity(0.6))
                                     }
-                                    .padding(.top, 4)
-                                } else {
-                                    let remaining = weeklyGoalMinutes - currentWeekCompletedMinutes
-                                    Text("\(formatTimeGoal(remaining)) remaining")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white.opacity(0.6))
-                                        .padding(.top, 4)
+                                    
+                                    Spacer()
                                 }
                             }
                         }
-                        .padding(20)
+                        .padding(16)
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.gray.opacity(0.1))
                         )
                         .padding(.horizontal, 20)
