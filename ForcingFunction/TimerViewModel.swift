@@ -149,10 +149,6 @@ class TimerViewModel: ObservableObject {
         selectedMinutes = 25.0
         remainingSeconds = Int(selectedMinutes * 60)
         
-        // Clean up orphaned sessions from crashes/force quits
-        // This removes any running/paused sessions that were left behind
-        dataStore.cleanupOrphanedSessions()
-        
         // Load statistics from stored data
         loadStatistics()
         
@@ -169,7 +165,23 @@ class TimerViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // Restore timer state from disk if available
+        // This MUST happen before cleanupOrphanedSessions to complete expired sessions
         restoreTimerState()
+        
+        // Complete any expired sessions that finished while app was terminated
+        // This handles the case where app was killed and notification fired
+        // Pass saved startTime to avoid completing the session that restoreTimerState() is handling
+        let savedStartTime = savedStartTimeTimestamp > 0 ? Date(timeIntervalSince1970: savedStartTimeTimestamp) : nil
+        dataStore.completeExpiredSessions(excludingStartTime: savedStartTime)
+        
+        // Reload statistics after completing expired sessions
+        loadStatistics()
+        
+        // Clean up orphaned sessions from crashes/force quits
+        // This removes any running/paused sessions that were left behind
+        // IMPORTANT: This runs AFTER restoreTimerState() and completeExpiredSessions() 
+        // so expired sessions can be completed first
+        dataStore.cleanupOrphanedSessions()
     }
     
     // MARK: - Statistics Loading
@@ -842,6 +854,7 @@ class TimerViewModel: ObservableObject {
             
             // If timer should have completed, end the session
             if calculatedRemaining <= 0 {
+                ensureCurrentSessionExists()
                 endSession()
                 return
             }

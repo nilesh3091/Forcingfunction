@@ -136,6 +136,7 @@ class PomodoroDataStore {
     
     /// Clean up orphaned sessions (running/paused sessions from previous app launches)
     /// These are sessions that were left in running/paused state when app crashed or was force-quit
+    /// IMPORTANT: This should be called AFTER restoreTimerState() completes expired sessions
     func cleanupOrphanedSessions() {
         let orphanedSessions = sessions.filter { session in
             session.status == .running || session.status == .paused
@@ -144,6 +145,55 @@ class PomodoroDataStore {
         if !orphanedSessions.isEmpty {
             print("Cleaning up \(orphanedSessions.count) orphaned session(s)")
             deleteSessions(orphanedSessions)
+        }
+    }
+    
+    /// Complete expired sessions that should have finished
+    /// This is called on app launch to complete sessions that finished while app was terminated
+    /// Note: Sessions matching saved timer state are handled by restoreTimerState(), so this
+    /// completes any other orphaned sessions that expired
+    func completeExpiredSessions(excludingStartTime: Date? = nil) {
+        let now = Date()
+        let expiredSessions = sessions.filter { session in
+            (session.status == .running || session.status == .paused) &&
+            session.endTime == nil &&
+            // Skip session if it matches the saved timer state (will be handled by restoreTimerState)
+            (excludingStartTime == nil || abs(session.startTime.timeIntervalSince(excludingStartTime!)) >= 1.0)
+        }
+        
+        for var session in expiredSessions {
+            // Calculate if session should have completed
+            var totalPausedTime: TimeInterval = 0
+            var pauseStartTime: Date?
+            
+            // Calculate paused time from events
+            for event in session.events.sorted(by: { $0.timestamp < $1.timestamp }) {
+                if event.eventType == .paused {
+                    pauseStartTime = event.timestamp
+                } else if event.eventType == .resumed, let pauseStart = pauseStartTime {
+                    totalPausedTime += event.timestamp.timeIntervalSince(pauseStart)
+                    pauseStartTime = nil
+                }
+            }
+            
+            // If still paused, add time until now
+            if let pauseStart = pauseStartTime {
+                totalPausedTime += now.timeIntervalSince(pauseStart)
+            }
+            
+            // Calculate elapsed time
+            let elapsed = now.timeIntervalSince(session.startTime) - totalPausedTime
+            let elapsedMinutes = elapsed / 60.0
+            
+            // If elapsed time exceeds planned duration, complete the session
+            if elapsedMinutes >= session.plannedDurationMinutes {
+                let completeEvent = SessionEvent(timestamp: now, eventType: .completed)
+                session.events.append(completeEvent)
+                session.endTime = now
+                session.status = .completed
+                updateSession(session)
+                print("Completed expired session: \(session.id) - elapsed: \(elapsedMinutes)min, planned: \(session.plannedDurationMinutes)min")
+            }
         }
     }
 }

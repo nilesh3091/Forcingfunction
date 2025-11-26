@@ -311,10 +311,10 @@ struct TimerView: View {
                         .frame(width: dialSize, height: dialSize)
                     
                     // Swept area fill (pie slice showing covered area)
-                    // Show when idle (full size) or running/paused (shrinking as time progresses)
+                    // Show when idle or completed (full size) or running/paused (shrinking as time progresses)
                     let pieAngle: Double = {
-                        if viewModel.timerState == .idle {
-                            // When idle, show full selected time
+                        if viewModel.timerState == .idle || viewModel.timerState == .completed {
+                            // When idle or completed, show full selected time
                             let currentTotalAngle = isDragging ? cumulativeDragAngle : viewModel.currentAngle
                             return min(currentTotalAngle, 360.0)  // Hard limit at 360° (60 minutes)
                         } else {
@@ -398,7 +398,8 @@ struct TimerView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
-                            if viewModel.timerState == .idle {
+                            // Allow interaction when idle or completed (user can set new time)
+                            if viewModel.timerState == .idle || viewModel.timerState == .completed {
                                 if !isDragging {
                                     isDragging = true
                                     lastSelectedMinutes = viewModel.selectedMinutes
@@ -487,10 +488,15 @@ struct TimerView: View {
                             }
                         }
                         .onEnded { value in
-                            if isDragging && viewModel.timerState == .idle {
+                            // Allow interaction when idle or completed (user can set new time)
+                            if isDragging && (viewModel.timerState == .idle || viewModel.timerState == .completed) {
                                 // Use cumulative angle for final calculation
                                 // Apply snapping only when drag ends
                                 viewModel.setTimeFromAngle(cumulativeDragAngle)
+                                // Reset to idle state if it was completed, so user can start new session
+                                if viewModel.timerState == .completed {
+                                    viewModel.timerState = .idle
+                                }
                             }
                             isDragging = false
                             dragRemainingSeconds = 0  // Reset drag display
