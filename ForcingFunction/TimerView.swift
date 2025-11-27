@@ -54,6 +54,7 @@ struct TimerView: View {
     
     // Day progress tracking
     @State private var dayProgress: Double = 0.0  // 0.0 to 1.0 (0% to 100%)
+    @State private var isInitialLoad: Bool = true  // Track if this is the first progress update
     
     // Haptic feedback helper functions
     private func triggerSelectionHaptic() {
@@ -91,7 +92,19 @@ struct TimerView: View {
     }
     
     private func updateDayProgress() {
-        dayProgress = calculateDayProgress()
+        let newProgress = calculateDayProgress()
+        // On initial load, update instantly without animation
+        if isInitialLoad {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                dayProgress = newProgress
+            }
+            isInitialLoad = false
+        } else {
+            // Subsequent updates animate smoothly over 60 seconds
+            dayProgress = newProgress
+        }
     }
     
     // Calculate today's total focus time in minutes
@@ -179,6 +192,37 @@ struct TimerView: View {
         // Calculate progress (0.0 to 1.0)
         let progress = elapsed / totalDayDuration
         return min(1.0, max(0.0, progress))
+    }
+    
+    // Generate time markers for every 6 hours (12am, 6am, 12pm, 6pm)
+    private func generateTimeMarkers() -> [(hour: Int, position: Double, label: String)] {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        
+        var markers: [(hour: Int, position: Double, label: String)] = []
+        
+        // Generate markers for every 6 hours (0, 6, 12, 18)
+        for hour in stride(from: 0, to: 24, by: 6) {
+            guard let markerTime = calendar.date(byAdding: .hour, value: hour, to: startOfDay) else { continue }
+            let position = calculateDayProgressPosition(for: markerTime)
+            
+            // Format label: 12am, 6am, 12pm, 6pm
+            let label: String
+            if hour == 0 {
+                label = "12am"
+            } else if hour == 12 {
+                label = "12pm"
+            } else if hour < 12 {
+                label = "\(hour)am"
+            } else {
+                label = "\(hour - 12)pm"
+            }
+            
+            markers.append((hour: hour, position: position, label: label))
+        }
+        
+        return markers
     }
     
     // Group sessions that are close together for stacking
@@ -291,6 +335,21 @@ struct TimerView: View {
                             }
                         }
                         .frame(height: 10)
+                        
+                        // Time markers labels below the bar
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                ForEach(generateTimeMarkers(), id: \.hour) { marker in
+                                    Text(marker.label)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .fixedSize()
+                                        .frame(width: 30, alignment: .center)
+                                        .offset(x: geometry.size.width * marker.position - 15)
+                                }
+                            }
+                        }
+                        .frame(height: 16)
                     }
                     .padding(.horizontal, 20)
                     
