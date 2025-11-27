@@ -40,7 +40,6 @@ extension Color {
 
 struct TimerView: View {
     @ObservedObject var viewModel: TimerViewModel
-    @State private var showingCompletionAlert = false
     @State private var isDragging = false
     @State private var dragAngle: Double = 0
     @State private var lastSelectedMinutes: Double = 0
@@ -311,10 +310,10 @@ struct TimerView: View {
                         .frame(width: dialSize, height: dialSize)
                     
                     // Swept area fill (pie slice showing covered area)
-                    // Show when idle or completed (full size) or running/paused (shrinking as time progresses)
+                    // Show when idle (full size) or running/paused (shrinking as time progresses)
                     let pieAngle: Double = {
-                        if viewModel.timerState == .idle || viewModel.timerState == .completed {
-                            // When idle or completed, show full selected time
+                        if viewModel.timerState == .idle {
+                            // When idle, show full selected time
                             let currentTotalAngle = isDragging ? cumulativeDragAngle : viewModel.currentAngle
                             return min(currentTotalAngle, 360.0)  // Hard limit at 360° (60 minutes)
                         } else {
@@ -366,12 +365,16 @@ struct TimerView: View {
                         let angle = viewModel.currentAngle.truncatingRemainder(dividingBy: 360.0)
                         return angle < 0 ? angle + 360.0 : angle
                     }()
-                    let handAngle = viewModel.timerState == .running || viewModel.timerState == .paused
-                        ? {
+                    let handAngle: Double = {
+                        if viewModel.timerState == .running || viewModel.timerState == .paused {
+                            // When running/paused, show elapsed angle
                             let angle = viewModel.elapsedAngle.truncatingRemainder(dividingBy: 360.0)
                             return angle < 0 ? angle + 360.0 : angle
-                        }()
-                        : displayAngle
+                        } else {
+                            // When idle, show selected time angle
+                            return displayAngle
+                        }
+                    }()
                     
                     // Hand line
                     Rectangle()
@@ -398,8 +401,8 @@ struct TimerView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
-                            // Allow interaction when idle or completed (user can set new time)
-                            if viewModel.timerState == .idle || viewModel.timerState == .completed {
+                            // Allow interaction when idle (user can set new time)
+                            if viewModel.timerState == .idle {
                                 if !isDragging {
                                     isDragging = true
                                     lastSelectedMinutes = viewModel.selectedMinutes
@@ -488,15 +491,11 @@ struct TimerView: View {
                             }
                         }
                         .onEnded { value in
-                            // Allow interaction when idle or completed (user can set new time)
-                            if isDragging && (viewModel.timerState == .idle || viewModel.timerState == .completed) {
+                            // Allow interaction when idle (user can set new time)
+                            if isDragging && viewModel.timerState == .idle {
                                 // Use cumulative angle for final calculation
                                 // Apply snapping only when drag ends
                                 viewModel.setTimeFromAngle(cumulativeDragAngle)
-                                // Reset to idle state if it was completed, so user can start new session
-                                if viewModel.timerState == .completed {
-                                    viewModel.timerState = .idle
-                                }
                             }
                             isDragging = false
                             dragRemainingSeconds = 0  // Reset drag display
@@ -571,13 +570,9 @@ struct TimerView: View {
                     } else {
                         // Start button (full width when idle)
                         Button(action: {
-                            if viewModel.timerState == .completed {
-                                showingCompletionAlert = true
-                            } else {
-                                viewModel.startTimer()
-                            }
+                            viewModel.startTimer()
                         }) {
-                            Text(viewModel.timerState == .completed ? "Start Next" : "START SESSION")
+                            Text("START SESSION")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -594,21 +589,7 @@ struct TimerView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .alert("Session Complete!", isPresented: $showingCompletionAlert) {
-            Button("Start Next") {
-                viewModel.startNextSession()
-            }
-            Button("Dismiss", role: .cancel) {
-                viewModel.timerState = .idle
-            }
-        } message: {
-            Text("Your \(viewModel.currentSessionType.displayName) session has finished!")
-        }
-        .onChange(of: viewModel.timerState) { oldValue, newState in
-            if newState == .completed && !viewModel.autoStartNext {
-                showingCompletionAlert = true
-            }
-        }
+        // Note: Completion alert removed - timer now resets to idle state automatically
         .onAppear {
             viewModel.updateSettings()
             viewModel.syncTimerState()

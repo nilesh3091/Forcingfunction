@@ -51,6 +51,7 @@ class TimerViewModel: ObservableObject {
     @AppStorage("savedPauseStartTime") private var savedPauseStartTimeTimestamp: Double = 0
     @AppStorage("savedSelectedMinutes") private var savedSelectedMinutes: Double = 25.0
     @AppStorage("savedSessionType") private var savedSessionTypeRaw: String = "Work"
+    @AppStorage("timerWasCompleted") private var timerWasCompleted: Bool = false
     
     // MARK: - Private Properties
     private var timer: Timer?
@@ -168,6 +169,12 @@ class TimerViewModel: ObservableObject {
         // This MUST happen before cleanupOrphanedSessions to complete expired sessions
         restoreTimerState()
         
+        // Note: We no longer restore completion state - we reset to idle instead
+        // Clear completion flag if it was set
+        if timerWasCompleted {
+            timerWasCompleted = false
+        }
+        
         // Complete any expired sessions that finished while app was terminated
         // This handles the case where app was killed and notification fired
         // Pass saved startTime to avoid completing the session that restoreTimerState() is handling
@@ -193,6 +200,9 @@ class TimerViewModel: ObservableObject {
     // MARK: - Timer Control
     func startTimer() {
         guard timerState != .running else { return }
+        
+        // Clear completion flag when starting new timer
+        timerWasCompleted = false
         
         // Don't start if time is 0
         guard selectedMinutes > 0 else { return }
@@ -412,7 +422,26 @@ class TimerViewModel: ObservableObject {
             print("Warning: endSession() called but no session found to complete")
         }
         
-        timerState = .completed
+        // Reset to default idle state when completed
+        // This matches the default state when app opens
+        timerState = .idle
+        
+        // Reset to default time based on session type
+        // Default is 25 minutes for work (matching app initialization)
+        switch currentSessionType {
+        case .work:
+            selectedMinutes = 25.0  // Default work session duration
+        case .shortBreak:
+            selectedMinutes = shortBreakMinutes
+        case .longBreak:
+            selectedMinutes = longBreakMinutes
+        }
+        
+        remainingSeconds = Int(selectedMinutes * 60)
+        pausedSeconds = remainingSeconds
+        
+        // Clear completion flag since we're resetting to idle
+        timerWasCompleted = false
         
         // Play sound if enabled
         if playSoundOnCompletion {
@@ -435,7 +464,7 @@ class TimerViewModel: ObservableObject {
             liveActivityManager.endActivity()
         }
         
-        // Clear saved timer state
+        // Clear saved timer state (but keep completion flag)
         clearTimerState()
         
         // Auto-start next session if enabled
@@ -810,6 +839,7 @@ class TimerViewModel: ObservableObject {
         savedPauseStartTimeTimestamp = 0
         savedSelectedMinutes = 25.0
         savedSessionTypeRaw = "Work"
+        // Note: timerWasCompleted flag is NOT cleared here - it's cleared after restoring state
     }
     
     /// Restore timer state from disk
