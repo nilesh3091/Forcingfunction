@@ -26,19 +26,22 @@ extension UserDefaults {
     }
 }
 
-// Make UUID Identifiable for sheet binding
-extension UUID: Identifiable {
-    public var id: UUID { self }
+// Wrapper for UUID to use with sheet(item:)
+struct CategoryGoalPickerItem: Identifiable {
+    let id: UUID
+    init(_ uuid: UUID) {
+        self.id = uuid
+    }
 }
 
 struct StatsView: View {
     @ObservedObject var viewModel: TimerViewModel
     @AppStorage("weeklyGoalMinutes") private var weeklyGoalMinutes: Int = 1200 // Default: 20 hours
     @State private var showingGoalPicker = false
-    @State private var showingCategoryGoalPicker: UUID? = nil
+    @State private var showingCategoryGoalPicker: CategoryGoalPickerItem? = nil
     @State private var showingCreateCategory = false
     @State private var refreshTrigger: Int = 0 // Force view refresh when goals change
-    @State private var isCategoryGoalsExpanded = false // Start collapsed
+    @State private var isCategoryGoalsExpanded = true // Always expanded/visible
     @State private var isArchivedGoalsExpanded = false // Start collapsed
     
     private let categoryManager = CategoryManager.shared
@@ -181,103 +184,7 @@ struct StatsView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
-                        // Weekly Total Goal Card (Vertical Stack Layout)
-                        VStack(alignment: .leading, spacing: 14) {
-                            // Title and Edit Button Row
-                            HStack {
-                                Text("Weekly Total Goal")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                
-                                Spacer()
-                                
-                                Button(action: {
-                                    showingGoalPicker = true
-                                }) {
-                                    Image(systemName: "pencil")
-                                        .font(.subheadline)
-                                        .foregroundColor(viewModel.accentColor)
-                                }
-                            }
-                            
-                            // Time Display Row (Full Width)
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    Text(formatTimeGoal(currentWeekCompletedMinutes))
-                                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                                        .foregroundColor(viewModel.accentColor)
-                                    
-                                    Text("/ \(formatTimeGoal(weeklyGoalMinutes))")
-                                        .font(.system(size: 20, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
-                                }
-                                
-                                Text("focus time this week")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.5))
-                            }
-                            
-                            // Progress Bar Row (Full Width)
-                            VStack(alignment: .leading, spacing: 6) {
-                                // Progress bar
-                                GeometryReader { geometry in
-                                    ZStack(alignment: .leading) {
-                                        // Background
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(height: 10)
-                                        
-                                        // Progress
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(
-                                                LinearGradient(
-                                                    gradient: Gradient(colors: [
-                                                        viewModel.accentColor,
-                                                        viewModel.accentColor.opacity(0.8)
-                                                    ]),
-                                                    startPoint: .leading,
-                                                    endPoint: .trailing
-                                                )
-                                            )
-                                            .frame(width: geometry.size.width * goalProgress, height: 10)
-                                            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: goalProgress)
-                                    }
-                                }
-                                .frame(height: 10)
-                                
-                                // Goal status text
-                                HStack {
-                                    if currentWeekCompletedMinutes >= weeklyGoalMinutes {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.caption)
-                                                .foregroundColor(.green)
-                                            Text("Goal achieved! 🎉")
-                                                .font(.caption)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.green)
-                                        }
-                                    } else {
-                                        let remaining = weeklyGoalMinutes - currentWeekCompletedMinutes
-                                        Text("\(formatTimeGoal(remaining)) remaining")
-                                            .font(.caption)
-                                            .foregroundColor(.white.opacity(0.6))
-                                    }
-                                    
-                                    Spacer()
-                                }
-                            }
-                        }
-                        .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.gray.opacity(0.1))
-                        )
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                        
-                        // Category Goals Section (Collapsible)
+                        // Category Goals Section (Always Visible) - Now includes Weekly Total Goal
                         CollapsibleCategoryGoalsSection(
                             title: "Category Goals",
                             isExpanded: $isCategoryGoalsExpanded,
@@ -288,11 +195,18 @@ struct StatsView: View {
                                 currentWeekCompletedMinutes(for: categoryId)
                             },
                             onSetGoal: { categoryId in
-                                showingCategoryGoalPicker = categoryId
+                                showingCategoryGoalPicker = CategoryGoalPickerItem(categoryId)
                             },
                             onAddCategory: {
                                 showingCreateCategory = true
-                            }
+                            },
+                            isCollapsible: false, // Always visible, not collapsible
+                            weeklyGoalMinutes: weeklyGoalMinutes,
+                            weeklyCompletedMinutes: currentWeekCompletedMinutes,
+                            onEditWeeklyGoal: {
+                                showingGoalPicker = true
+                            },
+                            formatTimeGoal: formatTimeGoal
                         )
                         
                         // Archived Category Goals Section (Collapsible)
@@ -307,7 +221,7 @@ struct StatsView: View {
                                     currentWeekCompletedMinutes(for: categoryId)
                                 },
                                 onSetGoal: { categoryId in
-                                    showingCategoryGoalPicker = categoryId
+                                    showingCategoryGoalPicker = CategoryGoalPickerItem(categoryId)
                                 },
                                 onAddCategory: nil,
                                 isArchived: true
@@ -342,7 +256,7 @@ struct StatsView: View {
                             CategoryBreakdownView(
                                 accentColor: viewModel.accentColor,
                                 onSetGoal: { categoryId in
-                                    showingCategoryGoalPicker = categoryId
+                                    showingCategoryGoalPicker = CategoryGoalPickerItem(categoryId)
                                 }
                             )
                         }
@@ -357,10 +271,10 @@ struct StatsView: View {
         .sheet(isPresented: $showingGoalPicker) {
             GoalPickerView(weeklyGoalMinutes: $weeklyGoalMinutes, accentColor: viewModel.accentColor)
         }
-        .sheet(item: $showingCategoryGoalPicker) { categoryId in
+        .sheet(item: $showingCategoryGoalPicker) { item in
             CategoryGoalPickerView(
-                categoryId: categoryId,
-                categoryName: CategoryManager.shared.getCategory(byId: categoryId)?.name ?? "Category",
+                categoryId: item.id,
+                categoryName: CategoryManager.shared.getCategory(byId: item.id)?.name ?? "Category",
                 accentColor: viewModel.accentColor,
                 onGoalChanged: {
                     refreshTrigger += 1
@@ -760,8 +674,20 @@ struct CollapsibleCategoryGoalsSection: View {
     let onSetGoal: (UUID) -> Void
     let onAddCategory: (() -> Void)?
     var isArchived: Bool = false
+    var isCollapsible: Bool = true // Default to collapsible for backwards compatibility
     
     private let categoryManager = CategoryManager.shared
+    
+    // Weekly Total Goal parameters (optional, only for main Category Goals section)
+    var weeklyGoalMinutes: Int? = nil
+    var weeklyCompletedMinutes: Int? = nil
+    var onEditWeeklyGoal: (() -> Void)? = nil
+    var formatTimeGoal: ((Int) -> String)? = nil
+    
+    private var weeklyGoalProgress: Double {
+        guard let weeklyGoalMinutes = weeklyGoalMinutes, let weeklyCompletedMinutes = weeklyCompletedMinutes, weeklyGoalMinutes > 0 else { return 0 }
+        return min(1.0, Double(weeklyCompletedMinutes) / Double(weeklyGoalMinutes))
+    }
     
     private var canAddMoreCategories: Bool {
         !isArchived && (categoriesWithGoals.count + categoriesWithoutGoals.count) < categoryManager.getMaxActiveCategories()
@@ -769,12 +695,33 @@ struct CollapsibleCategoryGoalsSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section Header (Always visible)
-            Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    isExpanded.toggle()
+            // Section Header
+            if isCollapsible {
+                // Collapsible header with button and chevron
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Text(title)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.6))
+                            .animation(.none, value: isExpanded)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
                 }
-            }) {
+                .buttonStyle(PlainButtonStyle())
+            } else {
+                // Non-collapsible header (always visible, no chevron)
                 HStack {
                     Text(title)
                         .font(.title2)
@@ -782,47 +729,174 @@ struct CollapsibleCategoryGoalsSection: View {
                         .foregroundColor(.white)
                     
                     Spacer()
-                    
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
-                        .animation(.none, value: isExpanded)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(PlainButtonStyle())
             
-            // Expanded Content
-            if isExpanded {
+            // Content (always visible if not collapsible, or when expanded if collapsible)
+            if !isCollapsible || isExpanded {
                 VStack(alignment: .leading, spacing: 12) {
-                    // Categories with goals
-                    ForEach(categoriesWithGoals, id: \.category.id) { categoryGoal in
-                        CompactCategoryGoalRow(
-                            category: categoryGoal.category,
-                            goalMinutes: categoryGoal.goalMinutes,
-                            completedMinutes: currentWeekCompletedMinutes(categoryGoal.category.id),
-                            accentColor: accentColor,
-                            isArchived: isArchived,
-                            onEdit: {
-                                onSetGoal(categoryGoal.category.id)
+                    // Weekly Total Goal Card (only for main Category Goals section, not archived)
+                    if let weeklyGoalMinutes = weeklyGoalMinutes,
+                       let weeklyCompletedMinutes = weeklyCompletedMinutes,
+                       let formatTimeGoal = formatTimeGoal,
+                       let onEditWeeklyGoal = onEditWeeklyGoal,
+                       !isArchived {
+                        VStack(alignment: .leading, spacing: 14) {
+                            // Title and Edit Button Row
+                            HStack {
+                                Text("Weekly Total Goal")
+                                    .font(.headline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                
+                                Spacer()
+                                
+                                Button(action: onEditWeeklyGoal) {
+                                    Image(systemName: "pencil")
+                                        .font(.subheadline)
+                                        .foregroundColor(accentColor)
+                                }
                             }
+                            
+                            // Time Display Row (Full Width)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text(formatTimeGoal(weeklyCompletedMinutes))
+                                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                                        .foregroundColor(accentColor)
+                                    
+                                    Text("/ \(formatTimeGoal(weeklyGoalMinutes))")
+                                        .font(.system(size: 20, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                                
+                                Text("focus time this week")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            
+                            // Progress Bar Row (Full Width)
+                            VStack(alignment: .leading, spacing: 6) {
+                                // Progress bar
+                                GeometryReader { geometry in
+                                    ZStack(alignment: .leading) {
+                                        // Background
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(height: 10)
+                                        
+                                        // Progress
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(
+                                                LinearGradient(
+                                                    gradient: Gradient(colors: [
+                                                        accentColor,
+                                                        accentColor.opacity(0.8)
+                                                    ]),
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                            .frame(width: geometry.size.width * weeklyGoalProgress, height: 10)
+                                            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: weeklyGoalProgress)
+                                    }
+                                }
+                                .frame(height: 10)
+                                
+                                // Goal status text
+                                HStack {
+                                    if weeklyCompletedMinutes >= weeklyGoalMinutes {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.caption)
+                                                .foregroundColor(.green)
+                                            Text("Goal achieved! 🎉")
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.green)
+                                        }
+                                    } else {
+                                        let remaining = weeklyGoalMinutes - weeklyCompletedMinutes
+                                        Text("\(formatTimeGoal(remaining)) remaining")
+                                            .font(.caption)
+                                            .foregroundColor(.white.opacity(0.6))
+                                    }
+                                    
+                                    Spacer()
+                                }
+                            }
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.gray.opacity(0.1))
                         )
                         .padding(.horizontal, 20)
+                        .padding(.top, 8)
                     }
                     
-                    // Categories without goals
-                    ForEach(categoriesWithoutGoals, id: \.id) { category in
-                        CompactCategoryNoGoalRow(
-                            category: category,
-                            accentColor: accentColor,
-                            isArchived: isArchived,
-                            onSetGoal: {
-                                onSetGoal(category.id)
-                            }
-                        )
-                        .padding(.horizontal, 20)
+                    // Use List for swipe actions to work properly
+                    List {
+                        // Categories with goals
+                        ForEach(categoriesWithGoals, id: \.category.id) { categoryGoal in
+                            CompactCategoryGoalRow(
+                                category: categoryGoal.category,
+                                goalMinutes: categoryGoal.goalMinutes,
+                                completedMinutes: currentWeekCompletedMinutes(categoryGoal.category.id),
+                                accentColor: accentColor,
+                                isArchived: isArchived,
+                                onEdit: {
+                                    onSetGoal(categoryGoal.category.id)
+                                },
+                                onArchive: !isArchived ? {
+                                    categoryManager.archiveCategory(categoryGoal.category)
+                                    // Trigger refresh
+                                    NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
+                                } : nil,
+                                onDelete: {
+                                    categoryManager.deleteCategory(categoryGoal.category)
+                                    // Also remove weekly goal if it exists
+                                    UserDefaults.standard.removeCategoryWeeklyGoal(categoryId: categoryGoal.category.id)
+                                    // Trigger refresh
+                                    NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
+                                }
+                            )
+                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                            .listRowBackground(Color.clear)
+                        }
+                        
+                        // Categories without goals
+                        ForEach(categoriesWithoutGoals, id: \.id) { category in
+                            CompactCategoryNoGoalRow(
+                                category: category,
+                                accentColor: accentColor,
+                                isArchived: isArchived,
+                                onSetGoal: {
+                                    onSetGoal(category.id)
+                                },
+                                onArchive: !isArchived ? {
+                                    categoryManager.archiveCategory(category)
+                                    // Trigger refresh
+                                    NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
+                                } : nil,
+                                onDelete: {
+                                    categoryManager.deleteCategory(category)
+                                    // Also remove weekly goal if it exists
+                                    UserDefaults.standard.removeCategoryWeeklyGoal(categoryId: category.id)
+                                    // Trigger refresh
+                                    NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
+                                }
+                            )
+                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                            .listRowBackground(Color.clear)
+                        }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .scrollDisabled(true)
+                    .frame(height: CGFloat(max(1, categoriesWithGoals.count + categoriesWithoutGoals.count) * 70))
                     
                     // Add category button after list (when there's room and not archived)
                     if let onAddCategory = onAddCategory, !isArchived {
@@ -881,7 +955,7 @@ struct CollapsibleCategoryGoalsSection: View {
                     }
                 }
                 .padding(.bottom, 12)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(isCollapsible ? .opacity.combined(with: .move(edge: .top)) : .identity)
             }
         }
         .padding(.top, 8)
@@ -1055,6 +1129,8 @@ struct CompactCategoryGoalRow: View {
     let accentColor: Color
     let isArchived: Bool
     let onEdit: () -> Void
+    let onArchive: (() -> Void)?
+    let onDelete: (() -> Void)?
     
     private var goalProgress: Double {
         guard goalMinutes > 0 else { return 0 }
@@ -1142,6 +1218,26 @@ struct CompactCategoryGoalRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.gray.opacity(isArchived ? 0.05 : 0.1))
         )
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // Delete button (always available)
+            if let onDelete = onDelete {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+            
+            // Archive button (only for active categories)
+            if let onArchive = onArchive, !isArchived {
+                Button {
+                    onArchive()
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+                .tint(.orange)
+            }
+        }
     }
 }
 
@@ -1152,23 +1248,25 @@ struct CompactCategoryNoGoalRow: View {
     let accentColor: Color
     let isArchived: Bool
     let onSetGoal: () -> Void
+    let onArchive: (() -> Void)?
+    let onDelete: (() -> Void)?
     
     var body: some View {
-        Button(action: onSetGoal) {
-            HStack(spacing: 8) {
-                // Category color indicator
-                Circle()
-                    .fill(isArchived ? category.color.color.opacity(0.4) : category.color.color)
-                    .frame(width: 12, height: 12)
-                
-                // Category name
-                Text(category.name)
-                    .font(.subheadline)
-                    .foregroundColor(isArchived ? .white.opacity(0.5) : .white.opacity(0.7))
-                
-                Spacer()
-                
-                // Set Goal button
+        HStack(spacing: 8) {
+            // Category color indicator
+            Circle()
+                .fill(isArchived ? category.color.color.opacity(0.4) : category.color.color)
+                .frame(width: 12, height: 12)
+            
+            // Category name
+            Text(category.name)
+                .font(.subheadline)
+                .foregroundColor(isArchived ? .white.opacity(0.5) : .white.opacity(0.7))
+            
+            Spacer()
+            
+            // Set Goal button
+            Button(action: onSetGoal) {
                 HStack(spacing: 4) {
                     Image(systemName: "plus.circle")
                         .font(.caption)
@@ -1177,11 +1275,35 @@ struct CompactCategoryNoGoalRow: View {
                 }
                 .foregroundColor(accentColor)
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.gray.opacity(isArchived ? 0.05 : 0.1))
-            )
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.gray.opacity(isArchived ? 0.05 : 0.1))
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onSetGoal()
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // Delete button (always available)
+            if let onDelete = onDelete {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+            
+            // Archive button (only for active categories)
+            if let onArchive = onArchive, !isArchived {
+                Button {
+                    onArchive()
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+                .tint(.orange)
+            }
         }
     }
 }

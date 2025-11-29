@@ -146,6 +146,12 @@ class CategoryManager {
         return false
     }
     
+    /// Delete a category permanently
+    func deleteCategory(_ category: Category) {
+        categories.removeAll { $0.id == category.id }
+        saveCategories()
+    }
+    
     /// Get session count for a category
     func getSessionCount(for categoryId: UUID) -> Int {
         let dataStore = PomodoroDataStore.shared
