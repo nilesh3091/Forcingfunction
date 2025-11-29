@@ -21,10 +21,10 @@ struct MainTabView: View {
                 }
                 .tag(0)
             
-            // Calendar Tab
+            // History Tab
             CalendarView(viewModel: viewModel)
                 .tabItem {
-                    Label("Calendar", systemImage: "calendar")
+                    Label("History", systemImage: "clock.arrow.circlepath")
                 }
                 .tag(1)
             
@@ -35,17 +35,17 @@ struct MainTabView: View {
                 }
                 .tag(2)
             
-            // Profile/Settings Tab
-            ProfileView(viewModel: viewModel)
+            // Tasks Tab
+            MoreView(viewModel: viewModel)
                 .tabItem {
-                    Label("Profile", systemImage: "person.fill")
+                    Label("Tasks", systemImage: "checklist")
                 }
                 .tag(3)
             
-            // More Tab
-            MoreView(viewModel: viewModel)
+            // Settings Tab
+            ProfileView(viewModel: viewModel)
                 .tabItem {
-                    Label("More", systemImage: "ellipsis.circle.fill")
+                    Label("Settings", systemImage: "gearshape.fill")
                 }
                 .tag(4)
         }

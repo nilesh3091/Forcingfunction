@@ -179,7 +179,7 @@ struct CalendarView: View {
                     }
                 }
             }
-            .navigationTitle("Calendar")
+            .navigationTitle("History")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

@@ -17,7 +17,7 @@ struct MoreView: View {
                     .ignoresSafeArea()
                 
                 VStack {
-                    Text("More")
+                    Text("Tasks")
                         .font(.title)
                         .foregroundColor(.white)
                     
@@ -35,7 +35,7 @@ struct MoreView: View {
                         .padding(.top, 20)
                 }
             }
-            .navigationTitle("More")
+            .navigationTitle("Tasks")
             .navigationBarTitleDisplayMode(.large)
         }
     }
