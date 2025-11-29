@@ -199,3 +199,51 @@ struct PomodoroSession: Codable, Identifiable {
     }
 }
 
+// MARK: - Task Models
+
+/// Represents a task with pomodoro time tracking
+struct PomodoroTask: Codable, Identifiable {
+    let id: UUID
+    var title: String
+    var isCompleted: Bool
+    var totalPomodoroMinutes: Double  // Accumulated time in minutes
+    let createdDate: Date
+    var completedDate: Date?
+    var isArchived: Bool  // Same as isCompleted, but explicit for clarity
+    
+    init(
+        id: UUID = UUID(),
+        title: String,
+        isCompleted: Bool = false,
+        totalPomodoroMinutes: Double = 0.0,
+        createdDate: Date = Date(),
+        completedDate: Date? = nil,
+        isArchived: Bool = false
+    ) {
+        self.id = id
+        self.title = title
+        self.isCompleted = isCompleted
+        self.totalPomodoroMinutes = totalPomodoroMinutes
+        self.createdDate = createdDate
+        self.completedDate = completedDate
+        self.isArchived = isArchived
+    }
+    
+    /// Format accumulated time as "Xh Ym" or "Ym"
+    var formattedTime: String {
+        let totalMinutes = Int(totalPomodoroMinutes)
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        
+        if hours > 0 {
+            if minutes > 0 {
+                return "\(hours)h \(minutes)m"
+            } else {
+                return "\(hours)h"
+            }
+        } else {
+            return "\(minutes)m"
+        }
+    }
+}
+

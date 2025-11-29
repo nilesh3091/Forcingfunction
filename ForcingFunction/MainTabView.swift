@@ -36,7 +36,7 @@ struct MainTabView: View {
                 .tag(2)
             
             // Tasks Tab
-            MoreView(viewModel: viewModel)
+            MoreView(viewModel: viewModel, selectedTab: $selectedTab)
                 .tabItem {
                     Label("Tasks", systemImage: "checklist")
                 }

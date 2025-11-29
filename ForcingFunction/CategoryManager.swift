@@ -44,6 +44,9 @@ class CategoryManager {
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(categories)
             UserDefaults.standard.set(data, forKey: categoriesKey)
+            
+            // Post notification that categories changed
+            NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
         } catch {
             print("Error saving categories: \(error)")
         }
@@ -150,6 +153,8 @@ class CategoryManager {
         return allSessions.filter { $0.categoryId == categoryId }.count
     }
 }
+
+
 
 
 

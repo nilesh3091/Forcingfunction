@@ -16,6 +16,21 @@ struct ForcingFunctionWidgetAttributes: ActivityAttributes {
         var sessionType: String  // "Work", "Short Break", "Long Break"
         var startTime: Date  // When timer started (for calculating remaining time)
         var pausedDuration: TimeInterval  // Total paused time in seconds
+        
+        // Explicit initializer
+        public init(
+            remainingSeconds: Int,
+            timerState: String,
+            sessionType: String,
+            startTime: Date,
+            pausedDuration: TimeInterval
+        ) {
+            self.remainingSeconds = remainingSeconds
+            self.timerState = timerState
+            self.sessionType = sessionType
+            self.startTime = startTime
+            self.pausedDuration = pausedDuration
+        }
     }
 
     // Fixed non-changing properties - set once when activity starts

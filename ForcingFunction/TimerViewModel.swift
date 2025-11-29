@@ -20,6 +20,7 @@ class TimerViewModel: ObservableObject {
     @Published var completedPomodoros: Int = 0
     @Published var totalFocusMinutes: Int = 0
     @AppStorage("selectedCategoryId") var selectedCategoryIdString: String = ""
+    @AppStorage("selectedTaskId") var selectedTaskIdString: String = ""
     
     var selectedCategoryId: UUID? {
         get {
@@ -27,6 +28,15 @@ class TimerViewModel: ObservableObject {
         }
         set {
             selectedCategoryIdString = newValue?.uuidString ?? ""
+        }
+    }
+    
+    var selectedTaskId: UUID? {
+        get {
+            UUID(uuidString: selectedTaskIdString)
+        }
+        set {
+            selectedTaskIdString = newValue?.uuidString ?? ""
         }
     }
     
@@ -64,6 +74,7 @@ class TimerViewModel: ObservableObject {
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
     private let dataStore = PomodoroDataStore.shared
+    private let taskDataStore = TaskDataStore.shared
     private var isAutoStartingNext = false
     private let liveActivityManager = LiveActivityManager.shared
     private let backgroundTaskManager = BackgroundTaskManager.shared
@@ -248,6 +259,13 @@ class TimerViewModel: ObservableObject {
             pauseStartTime = nil
             
             // Create new session
+            // Time tracking logic:
+            // - If a task is selected: time goes to task only (categoryId = nil)
+            // - If no task but category is selected: time goes to category (categoryId = selectedCategoryId)
+            // - If neither task nor category is selected: time goes to general statistics only (categoryId = nil)
+            //   Note: Time is still tracked in totalFocusMinutes and completedPomodoros, just not categorized
+            let sessionCategoryId: UUID? = selectedTaskId == nil ? selectedCategoryId : nil
+            
             let newSession = PomodoroSession(
                 sessionType: currentSessionType,
                 startTime: now,
@@ -255,7 +273,7 @@ class TimerViewModel: ObservableObject {
                 status: .running,
                 events: [SessionEvent(timestamp: now, eventType: .started)],
                 wasAutoStarted: isAutoStartingNext,
-                categoryId: selectedCategoryId
+                categoryId: sessionCategoryId
             )
             currentSession = newSession
             dataStore.addSession(newSession)
@@ -414,6 +432,18 @@ class TimerViewModel: ObservableObject {
                 loadStatistics() // Reload from data store to get accurate totals
                 // Update widget data
                 WidgetDataManager.shared.updateWidgetData()
+                
+                // Add time to task if one is selected
+                if let taskId = selectedTaskId {
+                    if let activeDuration = session.activeDurationMinutes {
+                        taskDataStore.addPomodoroTime(toTaskId: taskId, minutes: activeDuration)
+                    } else if let actualDuration = session.actualDurationMinutes {
+                        taskDataStore.addPomodoroTime(toTaskId: taskId, minutes: actualDuration)
+                    }
+                    // Clear task selection after session completes
+                    // User must click task again to add more time to it
+                    selectedTaskId = nil
+                }
             }
             
             currentSession = nil
@@ -736,6 +766,10 @@ class TimerViewModel: ObservableObject {
             // If we still can't find it, create a new one based on saved state
             // This handles edge cases where the session was never saved
             if let sessionType = SessionType(rawValue: savedSessionTypeRaw) {
+                // If a task is selected, don't assign category (time goes to task only)
+                // If no task is selected, assign category (time goes to category)
+                let sessionCategoryId: UUID? = selectedTaskId == nil ? selectedCategoryId : nil
+                
                 let newSession = PomodoroSession(
                     sessionType: sessionType,
                     startTime: startTime,
@@ -743,7 +777,7 @@ class TimerViewModel: ObservableObject {
                     status: timerState == .running ? .running : .paused,
                     events: [SessionEvent(timestamp: startTime, eventType: .started)],
                     wasAutoStarted: false,
-                    categoryId: selectedCategoryId
+                    categoryId: sessionCategoryId
                 )
                 currentSession = newSession
                 dataStore.addSession(newSession)

@@ -36,9 +36,12 @@ struct StatsView: View {
     @AppStorage("weeklyGoalMinutes") private var weeklyGoalMinutes: Int = 1200 // Default: 20 hours
     @State private var showingGoalPicker = false
     @State private var showingCategoryGoalPicker: UUID? = nil
+    @State private var showingCreateCategory = false
     @State private var refreshTrigger: Int = 0 // Force view refresh when goals change
     @State private var isCategoryGoalsExpanded = false // Start collapsed
     @State private var isArchivedGoalsExpanded = false // Start collapsed
+    
+    private let categoryManager = CategoryManager.shared
     
     // Calculate current week's completed focus time in minutes (excluding pauses)
     private var currentWeekCompletedMinutes: Int {
@@ -96,6 +99,7 @@ struct StatsView: View {
     
     // Get categories that have weekly goals set
     private var categoriesWithGoals: [(category: Category, goalMinutes: Int)] {
+        let _ = refreshTrigger // Force SwiftUI to recalculate when refreshTrigger changes
         let categoryManager = CategoryManager.shared
         let activeCategories = categoryManager.getActiveCategories()
         let defaults = UserDefaults.standard
@@ -110,6 +114,7 @@ struct StatsView: View {
     
     // Get active categories without goals
     private var categoriesWithoutGoals: [Category] {
+        let _ = refreshTrigger // Force SwiftUI to recalculate when refreshTrigger changes
         let categoryManager = CategoryManager.shared
         let activeCategories = categoryManager.getActiveCategories()
         let defaults = UserDefaults.standard
@@ -121,12 +126,14 @@ struct StatsView: View {
     
     // Get all archived categories
     private var archivedCategories: [Category] {
+        let _ = refreshTrigger // Force SwiftUI to recalculate when refreshTrigger changes
         let categoryManager = CategoryManager.shared
         return categoryManager.getArchivedCategories()
     }
     
     // Get archived categories with goals
     private var archivedCategoriesWithGoals: [(category: Category, goalMinutes: Int)] {
+        let _ = refreshTrigger // Force SwiftUI to recalculate when refreshTrigger changes
         let defaults = UserDefaults.standard
         
         return archivedCategories.compactMap { category -> (Category, Int)? in
@@ -139,6 +146,7 @@ struct StatsView: View {
     
     // Get archived categories without goals
     private var archivedCategoriesWithoutGoals: [Category] {
+        let _ = refreshTrigger // Force SwiftUI to recalculate when refreshTrigger changes
         let defaults = UserDefaults.standard
         
         return archivedCategories.filter { category in
@@ -281,6 +289,9 @@ struct StatsView: View {
                             },
                             onSetGoal: { categoryId in
                                 showingCategoryGoalPicker = categoryId
+                            },
+                            onAddCategory: {
+                                showingCreateCategory = true
                             }
                         )
                         
@@ -298,6 +309,7 @@ struct StatsView: View {
                                 onSetGoal: { categoryId in
                                     showingCategoryGoalPicker = categoryId
                                 },
+                                onAddCategory: nil,
                                 isArchived: true
                             )
                         }
@@ -355,9 +367,25 @@ struct StatsView: View {
                 }
             )
         }
+        .sheet(isPresented: $showingCreateCategory) {
+            CreateEditCategoryView(
+                accentColor: viewModel.accentColor,
+                onSave: { name, color in
+                    _ = categoryManager.createCategory(name: name, color: color)
+                    refreshTrigger += 1
+                }
+            )
+            .onDisappear {
+                // Refresh when sheet dismisses to ensure we catch any changes
+                refreshTrigger += 1
+            }
+        }
         .onAppear {
             // Update widget data when Stats view appears
             WidgetDataManager.shared.updateWidgetData()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .categoriesDidChange)) { _ in
+            refreshTrigger += 1
         }
     }
 }
@@ -730,7 +758,14 @@ struct CollapsibleCategoryGoalsSection: View {
     let accentColor: Color
     let currentWeekCompletedMinutes: (UUID) -> Int
     let onSetGoal: (UUID) -> Void
+    let onAddCategory: (() -> Void)?
     var isArchived: Bool = false
+    
+    private let categoryManager = CategoryManager.shared
+    
+    private var canAddMoreCategories: Bool {
+        !isArchived && (categoriesWithGoals.count + categoriesWithoutGoals.count) < categoryManager.getMaxActiveCategories()
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -789,13 +824,60 @@ struct CollapsibleCategoryGoalsSection: View {
                         .padding(.horizontal, 20)
                     }
                     
+                    // Add category button after list (when there's room and not archived)
+                    if let onAddCategory = onAddCategory, !isArchived {
+                        if canAddMoreCategories && (!categoriesWithGoals.isEmpty || !categoriesWithoutGoals.isEmpty) {
+                            Button(action: onAddCategory) {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(accentColor)
+                                    Text("Add Category")
+                                        .foregroundColor(accentColor)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(12)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
+                        } else if !canAddMoreCategories && (!categoriesWithGoals.isEmpty || !categoriesWithoutGoals.isEmpty) {
+                            Text("Archive a category to add more")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.5))
+                                .padding(.horizontal, 20)
+                                .padding(.top, 8)
+                        }
+                    }
+                    
                     // Show message if no categories exist
                     if categoriesWithGoals.isEmpty && categoriesWithoutGoals.isEmpty {
-                        Text("No categories available.")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.5))
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 8)
+                        VStack(spacing: 12) {
+                            Image(systemName: "tag")
+                                .font(.system(size: 32))
+                                .foregroundColor(.gray.opacity(0.5))
+                            
+                            Text("No categories yet")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.6))
+                            
+                            if let onAddCategory = onAddCategory, canAddMoreCategories {
+                                Button(action: onAddCategory) {
+                                    Text("Create Your First Category")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(accentColor)
+                                        .cornerRadius(8)
+                                }
+                                .padding(.top, 8)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 40)
                     }
                 }
                 .padding(.bottom, 12)

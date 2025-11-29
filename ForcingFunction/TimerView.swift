@@ -583,9 +583,17 @@ struct TimerView: View {
                         .monospacedDigit()
                         .accessibilityLabel("Remaining time: \(timeText)")
                     
-                    Text("session interval")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white.opacity(0.6))
+                    // Show task indicator or session interval
+                    if let taskId = viewModel.selectedTaskId,
+                       let _ = TaskDataStore.shared.getTask(byId: taskId) {
+                        Text("Task active")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(viewModel.accentColor)
+                    } else {
+                        Text("session interval")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
                 }
                 .padding(.top, 30)
                 
@@ -997,6 +1005,8 @@ struct SessionBlockView: View {
 
 struct CategoryPickerView: View {
     @ObservedObject var viewModel: TimerViewModel
+    @State private var activeCategories: [Category] = []
+    @State private var refreshTrigger = UUID()
     
     private let categoryManager = CategoryManager.shared
     
@@ -1004,13 +1014,19 @@ struct CategoryPickerView: View {
         viewModel.timerState != .idle
     }
     
-    private var activeCategories: [Category] {
-        categoryManager.getActiveCategories()
-    }
-    
     private var selectedCategory: Category? {
         guard let id = viewModel.selectedCategoryId else { return nil }
         return categoryManager.getCategory(byId: id)
+    }
+    
+    private func loadCategories() {
+        activeCategories = categoryManager.getActiveCategories()
+        
+        // Clear selection if selected category was archived
+        if let selectedId = viewModel.selectedCategoryId,
+           !activeCategories.contains(where: { $0.id == selectedId }) {
+            viewModel.selectedCategoryId = nil
+        }
     }
     
     var body: some View {
@@ -1045,6 +1061,14 @@ struct CategoryPickerView: View {
             .padding(.horizontal, 20)
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.selectedCategoryId)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: refreshTrigger)
+        .onAppear {
+            loadCategories()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .categoriesDidChange)) { _ in
+            loadCategories()
+            refreshTrigger = UUID()
+        }
     }
 }
 

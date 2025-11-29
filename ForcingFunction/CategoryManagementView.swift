@@ -26,6 +26,27 @@ struct CategoryManagementView: View {
             
             ScrollView {
                 VStack(spacing: 24) {
+                    // Add Category Button (always visible at top when there's room)
+                    if activeCategories.count < categoryManager.getMaxActiveCategories() {
+                        Button(action: {
+                            showingCreateCategory = true
+                        }) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 20))
+                                Text("Add Category")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(accentColor)
+                            .cornerRadius(12)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                    }
+                    
                     // Active Categories Section
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
@@ -41,7 +62,7 @@ struct CategoryManagementView: View {
                                 .foregroundColor(.white.opacity(0.6))
                         }
                         .padding(.horizontal, 20)
-                        .padding(.top, 20)
+                        .padding(.top, activeCategories.count < categoryManager.getMaxActiveCategories() ? 0 : 20)
                         
                         if activeCategories.isEmpty {
                             // Empty state
