@@ -118,6 +118,16 @@ class TaskDataStore {
         }
     }
     
+    /// Uncomplete a task (marks as not completed and unarchived)
+    func uncompleteTask(byId id: UUID) {
+        if let index = tasks.firstIndex(where: { $0.id == id }) {
+            tasks[index].isCompleted = false
+            tasks[index].isArchived = false
+            tasks[index].completedDate = nil
+            saveTasks()
+        }
+    }
+    
     /// Add pomodoro time to a task
     func addPomodoroTime(toTaskId id: UUID, minutes: Double) {
         if let index = tasks.firstIndex(where: { $0.id == id }) {
@@ -126,5 +136,6 @@ class TaskDataStore {
         }
     }
 }
+
 
 

@@ -13,7 +13,7 @@ struct MoreView: View {
     @State private var tasks: [PomodoroTask] = []
     @State private var archivedTasks: [PomodoroTask] = []
     @State private var showingArchived = false
-    @State private var newTaskTitle = ""
+    @State private var isCreatingNewTask = false
     @State private var editingTaskId: UUID?
     @State private var editingTitle = ""
     @State private var taskDataStore = TaskDataStore.shared
@@ -25,33 +25,6 @@ struct MoreView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Task creation field
-                    HStack(spacing: 12) {
-                        TextField("New task", text: $newTaskTitle)
-                            .textFieldStyle(PlainTextFieldStyle())
-                            .font(.system(size: 16))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.gray.opacity(0.2))
-                            .cornerRadius(10)
-                            .onSubmit {
-                                addTask()
-                            }
-                        
-                        Button(action: {
-                            addTask()
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(viewModel.accentColor)
-                        }
-                        .disabled(newTaskTitle.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 16)
-                    
                     // Toggle archived view
                     if !archivedTasks.isEmpty {
                         Button(action: {
@@ -106,7 +79,7 @@ struct MoreView: View {
                         }
                     } else {
                         // Active tasks
-                        if tasks.isEmpty {
+                        if tasks.isEmpty && !isCreatingNewTask {
                             Spacer()
                             VStack(spacing: 12) {
                                 Image(systemName: "checklist")
@@ -126,6 +99,24 @@ struct MoreView: View {
                             Spacer()
                         } else {
                             List {
+                                // Inline new task editor (embedded in list, appears at the top)
+                                if isCreatingNewTask && !showingArchived {
+                                    InlineNewTaskView(
+                                        viewModel: viewModel,
+                                        onTaskCreated: {
+                                            isCreatingNewTask = false
+                                            loadTasks()
+                                        },
+                                        onCancel: {
+                                            isCreatingNewTask = false
+                                        }
+                                    )
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .id("newTaskEditor") // Give it a stable ID for focus system
+                                }
+                                
+                                // Existing tasks
                                 ForEach(tasks) { task in
                                     TaskRowView(
                                         task: task,
@@ -160,6 +151,35 @@ struct MoreView: View {
                     loadTasks()
                 }
             }
+            .overlay(
+                // Floating Action Button - only show when NOT creating new task
+                Group {
+                    if !showingArchived && !isCreatingNewTask {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                // Plus button to add new task
+                                Button(action: {
+                                    withAnimation {
+                                        isCreatingNewTask = true
+                                    }
+                                }) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .frame(width: 56, height: 56)
+                                        .background(viewModel.accentColor)
+                                        .clipShape(Circle())
+                                        .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+                                }
+                                .padding(.trailing, 20)
+                                .padding(.bottom, 20)
+                            }
+                        }
+                    }
+                }
+            )
         }
     }
     
@@ -168,15 +188,6 @@ struct MoreView: View {
         archivedTasks = taskDataStore.getArchivedTasks()
     }
     
-    private func addTask() {
-        let trimmedTitle = newTaskTitle.trimmingCharacters(in: .whitespaces)
-        guard !trimmedTitle.isEmpty else { return }
-        
-        let newTask = PomodoroTask(title: trimmedTitle)
-        taskDataStore.addTask(newTask)
-        newTaskTitle = ""
-        loadTasks()
-    }
     
     private func deleteTasks(at offsets: IndexSet) {
         for index in offsets {
@@ -206,16 +217,20 @@ struct TaskRowView: View {
     
     var body: some View {
         HStack(spacing: 16) {
-            // Checkbox
+            // Checkbox - can toggle for both active and archived tasks
             Button(action: {
-                if !task.isArchived {
+                if task.isCompleted {
+                    // Uncomplete the task
+                    taskDataStore.uncompleteTask(byId: task.id)
+                } else {
+                    // Complete the task
                     taskDataStore.completeTask(byId: task.id)
                     // Clear selected task if this was the selected one
                     if viewModel.selectedTaskId == task.id {
                         viewModel.selectedTaskId = nil
                     }
-                    onUpdate()
                 }
+                onUpdate()
             }) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 24))
@@ -303,6 +318,97 @@ struct TaskRowView: View {
         taskDataStore.updateTask(updatedTask)
         isEditing = false
         onUpdate()
+    }
+}
+
+struct InlineNewTaskView: View {
+    @ObservedObject var viewModel: TimerViewModel
+    let onTaskCreated: () -> Void
+    let onCancel: () -> Void
+    
+    @State private var taskTitle = ""
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Checkbox indicator (unchecked circle, matching TaskRowView)
+            Image(systemName: "circle")
+                .font(.system(size: 24))
+                .foregroundColor(.gray.opacity(0.5))
+            
+            // Task title field
+            TextField("New To-Do", text: $taskTitle)
+                .textFieldStyle(PlainTextFieldStyle())
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white)
+                .focused($isFocused)
+                .onSubmit {
+                    if !taskTitle.trimmingCharacters(in: .whitespaces).isEmpty {
+                        saveTask()
+                    }
+                }
+            
+            Spacer()
+            
+            // Action buttons on the right (matching TaskRowView edit button placement)
+            HStack(spacing: 12) {
+                // Cancel button
+                Button(action: {
+                    cancelTask()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                // Save/Confirm button
+                Button(action: {
+                    saveTask()
+                }) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(taskTitle.trimmingCharacters(in: .whitespaces).isEmpty ? .gray.opacity(0.5) : viewModel.accentColor)
+                }
+                .disabled(taskTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(12)
+        .onAppear {
+            // Auto-focus with a slight delay to ensure view is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                isFocused = true
+            }
+        }
+    }
+    
+    private func saveTask() {
+        let trimmedTitle = taskTitle.trimmingCharacters(in: .whitespaces)
+        guard !trimmedTitle.isEmpty else {
+            cancelTask()
+            return
+        }
+        
+        let newTask = PomodoroTask(
+            title: trimmedTitle,
+            notes: nil
+        )
+        TaskDataStore.shared.addTask(newTask)
+        
+        // Reset and notify
+        taskTitle = ""
+        isFocused = false
+        onTaskCreated()
+    }
+    
+    private func cancelTask() {
+        taskTitle = ""
+        isFocused = false
+        onCancel()
     }
 }
 

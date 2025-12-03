@@ -205,6 +205,7 @@ struct PomodoroSession: Codable, Identifiable {
 struct PomodoroTask: Codable, Identifiable {
     let id: UUID
     var title: String
+    var notes: String?
     var isCompleted: Bool
     var totalPomodoroMinutes: Double  // Accumulated time in minutes
     let createdDate: Date
@@ -214,6 +215,7 @@ struct PomodoroTask: Codable, Identifiable {
     init(
         id: UUID = UUID(),
         title: String,
+        notes: String? = nil,
         isCompleted: Bool = false,
         totalPomodoroMinutes: Double = 0.0,
         createdDate: Date = Date(),
@@ -222,6 +224,7 @@ struct PomodoroTask: Codable, Identifiable {
     ) {
         self.id = id
         self.title = title
+        self.notes = notes
         self.isCompleted = isCompleted
         self.totalPomodoroMinutes = totalPomodoroMinutes
         self.createdDate = createdDate
