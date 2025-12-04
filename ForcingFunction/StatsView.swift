@@ -184,7 +184,7 @@ struct StatsView: View {
                     .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 28) {
                         // Category Goals Section (Always Visible) - Now includes Weekly Total Goal
                         CollapsibleCategoryGoalsSection(
                             title: "Category Goals",
@@ -236,11 +236,11 @@ struct StatsView: View {
                         }
                         
                         // Statistics Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Statistics")
-                                .font(.title2)
-                                .fontWeight(.bold)
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text("Overview")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
+                                .tracking(0.5)
                                 .padding(.horizontal, 20)
                             
                             // Total Focus Time
@@ -355,29 +355,52 @@ struct StatCard: View {
     let color: Color
     
     var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
-                .frame(width: 40)
+        HStack(spacing: 18) {
+            // Icon with background
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(color)
+            }
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .tracking(0.3)
                 
                 Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
             
             Spacer()
         }
-        .padding(20)
+        .padding(22)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.1))
+            ZStack {
+                // Gradient background
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.gray.opacity(0.15),
+                                Color.gray.opacity(0.08)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                // Subtle border
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 3)
         )
         .padding(.horizontal, 20)
     }
@@ -766,17 +789,17 @@ struct CollapsibleCategoryGoalsSection: View {
                 }
                 .buttonStyle(PlainButtonStyle())
             } else {
-                // Non-collapsible header (always visible, no chevron)
+                // Non-collapsible header (always visible, no chevron) - Enhanced visibility
                 HStack {
                     Text(title)
-                        .font(.title2)
-                        .fontWeight(.bold)
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
+                        .tracking(0.5)
                     
                     Spacer()
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.vertical, 18)
             }
             
             // Content (always visible if not collapsible, or when expanded if collapsible)
@@ -788,102 +811,161 @@ struct CollapsibleCategoryGoalsSection: View {
                        let formatTimeGoal = formatTimeGoal,
                        let onEditWeeklyGoal = onEditWeeklyGoal,
                        !isArchived {
-                        VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 18) {
                             // Title and Edit Button Row
                             HStack {
                                 Text("Weekly Total Goal")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
+                                    .font(.system(size: 18, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
+                                    .tracking(0.5)
                                 
                                 Spacer()
                                 
                                 Button(action: onEditWeeklyGoal) {
                                     Image(systemName: "pencil")
-                                        .font(.subheadline)
+                                        .font(.system(size: 14, weight: .semibold))
                                         .foregroundColor(accentColor)
+                                        .padding(8)
+                                        .background(accentColor.opacity(0.15))
+                                        .clipShape(Circle())
                                 }
                             }
                             
-                            // Time Display Row (Full Width)
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    Text(formatTimeGoal(weeklyCompletedMinutes))
-                                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                                        .foregroundColor(accentColor)
+                            // Time Display Row (Full Width) - Enhanced
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                    // Format both in the same unit style for consistency
+                                    let completedFormatted = formatTimeGoal(weeklyCompletedMinutes)
+                                    let goalFormatted = formatTimeGoal(weeklyGoalMinutes)
                                     
-                                    Text("/ \(formatTimeGoal(weeklyGoalMinutes))")
-                                        .font(.system(size: 20, weight: .medium))
+                                    Text(completedFormatted)
+                                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                                        .foregroundColor(accentColor)
+                                        .shadow(color: accentColor.opacity(0.3), radius: 4, x: 0, y: 2)
+                                    
+                                    Text("/ \(goalFormatted)")
+                                        .font(.system(size: 22, weight: .medium, design: .rounded))
                                         .foregroundColor(.white.opacity(0.7))
                                 }
                                 
                                 Text("focus time this week")
-                                    .font(.caption)
+                                    .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(.white.opacity(0.5))
+                                    .tracking(0.3)
                             }
                             
-                            // Progress Bar Row (Full Width)
-                            VStack(alignment: .leading, spacing: 6) {
-                                // Progress bar
+                            // Progress Bar Row (Full Width) - Enhanced
+                            VStack(alignment: .leading, spacing: 8) {
+                                // Progress bar with percentage
                                 GeometryReader { geometry in
                                     ZStack(alignment: .leading) {
-                                        // Background
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(height: 10)
-                                        
-                                        // Progress
-                                        RoundedRectangle(cornerRadius: 6)
+                                        // Background with subtle gradient
+                                        RoundedRectangle(cornerRadius: 10)
                                             .fill(
                                                 LinearGradient(
                                                     gradient: Gradient(colors: [
-                                                        accentColor,
-                                                        accentColor.opacity(0.8)
+                                                        Color.gray.opacity(0.25),
+                                                        Color.gray.opacity(0.15)
                                                     ]),
                                                     startPoint: .leading,
                                                     endPoint: .trailing
                                                 )
                                             )
-                                            .frame(width: geometry.size.width * weeklyGoalProgress, height: 10)
-                                            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: weeklyGoalProgress)
+                                            .frame(height: 12)
+                                        
+                                        // Progress with enhanced gradient and glow
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(
+                                                LinearGradient(
+                                                    gradient: Gradient(colors: [
+                                                        accentColor,
+                                                        accentColor.opacity(0.85),
+                                                        accentColor.opacity(0.7)
+                                                    ]),
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                            .frame(width: geometry.size.width * weeklyGoalProgress, height: 12)
+                                            .shadow(color: accentColor.opacity(0.5), radius: 4, x: 0, y: 0)
+                                            .animation(.spring(response: 0.6, dampingFraction: 0.7), value: weeklyGoalProgress)
                                     }
                                 }
-                                .frame(height: 10)
+                                .frame(height: 12)
                                 
-                                // Goal status text
+                                // Goal status text with enhanced styling
                                 HStack {
                                     if weeklyCompletedMinutes >= weeklyGoalMinutes {
-                                        HStack(spacing: 4) {
+                                        HStack(spacing: 6) {
                                             Image(systemName: "checkmark.circle.fill")
-                                                .font(.caption)
+                                                .font(.system(size: 14, weight: .bold))
                                                 .foregroundColor(.green)
+                                                .shadow(color: .green.opacity(0.5), radius: 3, x: 0, y: 1)
                                             Text("Goal achieved! 🎉")
-                                                .font(.caption)
-                                                .fontWeight(.semibold)
+                                                .font(.system(size: 13, weight: .semibold, design: .rounded))
                                                 .foregroundColor(.green)
                                         }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.green.opacity(0.15))
+                                        .cornerRadius(8)
                                     } else {
                                         let remaining = weeklyGoalMinutes - weeklyCompletedMinutes
-                                        Text("\(formatTimeGoal(remaining)) remaining")
-                                            .font(.caption)
-                                            .foregroundColor(.white.opacity(0.6))
+                                        let percentage = Int((Double(weeklyCompletedMinutes) / Double(weeklyGoalMinutes)) * 100)
+                                        HStack(spacing: 6) {
+                                            Text("\(percentage)%")
+                                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                .foregroundColor(accentColor)
+                                            Text("•")
+                                                .foregroundColor(.white.opacity(0.4))
+                                            Text("\(formatTimeGoal(remaining)) remaining")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundColor(.white.opacity(0.6))
+                                        }
                                     }
                                     
                                     Spacer()
                                 }
                             }
                         }
-                        .padding(16)
+                        .padding(24)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.gray.opacity(0.1))
+                            ZStack {
+                                // Gradient background
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.gray.opacity(0.15),
+                                                Color.gray.opacity(0.08)
+                                            ]),
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                
+                                // Subtle border
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.white.opacity(0.1),
+                                                Color.white.opacity(0.05)
+                                            ]),
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            }
+                            .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
                         )
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                     }
                     
-                    // Use List for swipe actions to work properly
-                    List {
+                    // Use VStack instead of List since we're in a ScrollView - allows all categories to be visible
+                    VStack(spacing: 12) {
                         // Categories with goals
                         ForEach(categoriesWithGoals, id: \.category.id) { categoryGoal in
                             CompactCategoryGoalRow(
@@ -914,9 +996,7 @@ struct CollapsibleCategoryGoalsSection: View {
                                     NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
                                 }
                             )
-                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                            .padding(.horizontal, 20)
                         }
                         
                         // Categories without goals
@@ -947,70 +1027,115 @@ struct CollapsibleCategoryGoalsSection: View {
                                     NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
                                 }
                             )
-                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                            .padding(.horizontal, 20)
                         }
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .scrollDisabled(true)
-                    .frame(height: CGFloat(max(1, categoriesWithGoals.count + categoriesWithoutGoals.count) * 70))
                     
-                    // Add category button after list (when there's room and not archived)
+                    // Add category button after list (when there's room and not archived) - Enhanced
                     if let onAddCategory = onAddCategory, !isArchived {
                         if canAddMoreCategories && (!categoriesWithGoals.isEmpty || !categoriesWithoutGoals.isEmpty) {
                             Button(action: onAddCategory) {
-                                HStack {
+                                HStack(spacing: 10) {
                                     Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(accentColor)
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.white)
                                     Text("Add Category")
-                                        .foregroundColor(accentColor)
+                                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white)
                                 }
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.gray.opacity(0.1))
-                                .cornerRadius(12)
+                                .padding(.vertical, 16)
+                                .background(
+                                    ZStack {
+                                        // Gradient background
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .fill(
+                                                LinearGradient(
+                                                    gradient: Gradient(colors: [
+                                                        accentColor,
+                                                        accentColor.opacity(0.85)
+                                                    ]),
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                        
+                                        // Subtle glow
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .fill(accentColor.opacity(0.3))
+                                            .blur(radius: 8)
+                                    }
+                                )
+                                .shadow(color: accentColor.opacity(0.4), radius: 8, x: 0, y: 4)
                             }
                             .padding(.horizontal, 20)
-                            .padding(.top, 8)
+                            .padding(.top, 12)
                         } else if !canAddMoreCategories && (!categoriesWithGoals.isEmpty || !categoriesWithoutGoals.isEmpty) {
-                            Text("Archive a category to add more")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.5))
-                                .padding(.horizontal, 20)
-                                .padding(.top, 8)
+                            HStack {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white.opacity(0.5))
+                                Text("Archive a category to add more")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 12)
                         }
                     }
                     
-                    // Show message if no categories exist
+                    // Show message if no categories exist - Enhanced
                     if categoriesWithGoals.isEmpty && categoriesWithoutGoals.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "tag")
-                                .font(.system(size: 32))
-                                .foregroundColor(.gray.opacity(0.5))
+                        VStack(spacing: 16) {
+                            ZStack {
+                                Circle()
+                                    .fill(accentColor.opacity(0.15))
+                                    .frame(width: 80, height: 80)
+                                
+                                Image(systemName: "tag.fill")
+                                    .font(.system(size: 36, weight: .medium))
+                                    .foregroundColor(accentColor)
+                            }
                             
                             Text("No categories yet")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.6))
+                                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.7))
+                            
+                            Text("Create categories to track your focus time")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white.opacity(0.5))
+                                .multilineTextAlignment(.center)
                             
                             if let onAddCategory = onAddCategory, canAddMoreCategories {
                                 Button(action: onAddCategory) {
-                                    Text("Create Your First Category")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 20)
-                                        .padding(.vertical, 10)
-                                        .background(accentColor)
-                                        .cornerRadius(8)
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 16, weight: .semibold))
+                                        Text("Create Your First Category")
+                                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                accentColor,
+                                                accentColor.opacity(0.85)
+                                            ]),
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .cornerRadius(12)
+                                    .shadow(color: accentColor.opacity(0.4), radius: 8, x: 0, y: 4)
                                 }
                                 .padding(.top, 8)
                             }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 20)
-                        .padding(.vertical, 40)
+                        .padding(.vertical, 50)
                     }
                 }
                 .padding(.bottom, 12)
@@ -1212,35 +1337,50 @@ struct CompactCategoryGoalRow: View {
         }
     }
     
+    private var goalStatusColor: Color {
+        if completedMinutes >= goalMinutes {
+            return .green
+        } else if goalProgress >= 0.75 {
+            return .orange
+        } else {
+            return category.color.color
+        }
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                // Category color indicator
-                Circle()
-                    .fill(isArchived ? category.color.color.opacity(0.4) : category.color.color)
-                    .frame(width: 12, height: 12)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                // Category color indicator with border accent
+                ZStack {
+                    Circle()
+                        .fill(isArchived ? category.color.color.opacity(0.2) : category.color.color.opacity(0.2))
+                        .frame(width: 20, height: 20)
+                    
+                    Circle()
+                        .fill(isArchived ? category.color.color.opacity(0.4) : category.color.color)
+                        .frame(width: 14, height: 14)
+                }
                 
-                // Category name
+                // Category name with enhanced typography
                 Text(category.name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundColor(isArchived ? .white.opacity(0.6) : .white)
+                    .tracking(0.2)
                 
                 Spacer()
                 
-                // Progress: XhYm / Zh
-                HStack(spacing: 4) {
+                // Progress: XhYm / Zh with enhanced styling
+                HStack(spacing: 5) {
                     Text(formatTimeGoal(completedMinutes))
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(isArchived ? category.color.color.opacity(0.6) : category.color.color)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(isArchived ? category.color.color.opacity(0.6) : goalStatusColor)
                     
                     Text("/ \(formatTimeGoal(goalMinutes))")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
                 }
                 
-                // Edit menu button (only for active categories)
+                // Edit menu button (only for active categories) - Enhanced
                 if !isArchived, let onEditCategory = onEditCategory {
                     Menu {
                         Button(action: onEditGoal) {
@@ -1264,75 +1404,128 @@ struct CompactCategoryGoalRow: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.caption)
+                        Image(systemName: "ellipsis.circle.fill")
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundColor(accentColor)
+                            .padding(4)
                     }
                 } else {
                     // Edit goal button (for archived categories or when edit category is not available)
                     Button(action: onEditGoal) {
                         Image(systemName: "pencil")
-                            .font(.caption)
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundColor(accentColor)
+                            .padding(6)
+                            .background(accentColor.opacity(0.15))
+                            .clipShape(Circle())
                     }
                 }
             }
             
-            // Progress bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // Background
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 6)
-                    
-                    // Progress
-                    RoundedRectangle(cornerRadius: 4)
+            // Enhanced Progress bar with percentage
+            VStack(alignment: .leading, spacing: 6) {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background with gradient
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.gray.opacity(0.25),
+                                        Color.gray.opacity(0.15)
+                                    ]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(height: 10)
+                        
+                        // Progress with enhanced gradient
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        isArchived ? category.color.color.opacity(0.4) : goalStatusColor,
+                                        isArchived ? category.color.color.opacity(0.3) : goalStatusColor.opacity(0.75)
+                                    ]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: geometry.size.width * goalProgress, height: 10)
+                            .shadow(color: goalStatusColor.opacity(0.4), radius: 3, x: 0, y: 1)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.7), value: goalProgress)
+                    }
+                }
+                .frame(height: 10)
+                
+                // Status indicator
+                HStack(spacing: 4) {
+                    if completedMinutes >= goalMinutes {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.green)
+                            Text("Achieved")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.green)
+                        }
+                    } else {
+                        let percentage = Int(goalProgress * 100)
+                        Text("\(percentage)%")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundColor(goalStatusColor.opacity(0.8))
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            ZStack {
+                // Main background with gradient
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.gray.opacity(isArchived ? 0.08 : 0.12),
+                                Color.gray.opacity(isArchived ? 0.04 : 0.08)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                // Left border accent with category color - Subtle
+                HStack {
+                    RoundedRectangle(cornerRadius: 14)
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(colors: [
-                                    isArchived ? category.color.color.opacity(0.4) : category.color.color,
-                                    isArchived ? category.color.color.opacity(0.3) : category.color.color.opacity(0.8)
+                                    isArchived ? category.color.color.opacity(0.2) : category.color.color.opacity(0.4),
+                                    isArchived ? category.color.color.opacity(0.15) : category.color.color.opacity(0.3)
                                 ]),
-                                startPoint: .leading,
-                                endPoint: .trailing
+                                startPoint: .top,
+                                endPoint: .bottom
                             )
                         )
-                        .frame(width: geometry.size.width * goalProgress, height: 6)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: goalProgress)
+                        .frame(width: 3)
+                    Spacer()
                 }
+                
+                // Subtle border
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
             }
-            .frame(height: 6)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.gray.opacity(isArchived ? 0.05 : 0.1))
+            .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 3)
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            onTap()
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            // Delete button (always available)
-            if let onDelete = onDelete {
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-            
-            // Archive button (only for active categories)
-            if let onArchive = onArchive, !isArchived {
-                Button {
-                    onArchive()
-                } label: {
-                    Label("Archive", systemImage: "archivebox")
-                }
-                .tint(.orange)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                onTap()
             }
         }
+        .scaleEffect(1.0)
     }
 }
 
@@ -1349,20 +1542,27 @@ struct CompactCategoryNoGoalRow: View {
     let onDelete: (() -> Void)?
     
     var body: some View {
-        HStack(spacing: 8) {
-            // Category color indicator
-            Circle()
-                .fill(isArchived ? category.color.color.opacity(0.4) : category.color.color)
-                .frame(width: 12, height: 12)
+        HStack(spacing: 12) {
+            // Category color indicator with border accent
+            ZStack {
+                Circle()
+                    .fill(isArchived ? category.color.color.opacity(0.2) : category.color.color.opacity(0.2))
+                    .frame(width: 20, height: 20)
+                
+                Circle()
+                    .fill(isArchived ? category.color.color.opacity(0.4) : category.color.color)
+                    .frame(width: 14, height: 14)
+            }
             
-            // Category name
+            // Category name with enhanced typography
             Text(category.name)
-                .font(.subheadline)
-                .foregroundColor(isArchived ? .white.opacity(0.5) : .white.opacity(0.7))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundColor(isArchived ? .white.opacity(0.5) : .white.opacity(0.85))
+                .tracking(0.2)
             
             Spacer()
             
-            // Menu button (only for active categories)
+            // Menu button (only for active categories) - Enhanced
             if !isArchived, let onEditCategory = onEditCategory {
                 Menu {
                     Button(action: onSetGoal) {
@@ -1386,52 +1586,74 @@ struct CompactCategoryNoGoalRow: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.caption)
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 18, weight: .medium))
                         .foregroundColor(accentColor)
+                        .padding(4)
                 }
             } else {
-                // Set Goal button (for archived categories)
+                // Set Goal button (for archived categories) - Enhanced
                 Button(action: onSetGoal) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus.circle")
-                            .font(.caption)
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
                         Text("Set Goal")
-                            .font(.caption)
+                            .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundColor(accentColor)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(accentColor.opacity(0.15))
+                    .cornerRadius(8)
                 }
             }
         }
-        .padding(12)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.gray.opacity(isArchived ? 0.05 : 0.1))
+            ZStack {
+                // Main background with gradient
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.gray.opacity(isArchived ? 0.08 : 0.12),
+                                Color.gray.opacity(isArchived ? 0.04 : 0.08)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                // Left border accent with category color - Subtle
+                HStack {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    isArchived ? category.color.color.opacity(0.2) : category.color.color.opacity(0.4),
+                                    isArchived ? category.color.color.opacity(0.15) : category.color.color.opacity(0.3)
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 3)
+                    Spacer()
+                }
+                
+                // Subtle border
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 3)
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            onTap()
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            // Delete button (always available)
-            if let onDelete = onDelete {
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-            
-            // Archive button (only for active categories)
-            if let onArchive = onArchive, !isArchived {
-                Button {
-                    onArchive()
-                } label: {
-                    Label("Archive", systemImage: "archivebox")
-                }
-                .tint(.orange)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                onTap()
             }
         }
+        .scaleEffect(1.0)
     }
 }
 
