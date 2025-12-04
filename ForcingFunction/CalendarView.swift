@@ -7,11 +7,40 @@
 
 import SwiftUI
 
+// MARK: - History Range
+
+private enum HistoryRange: String, CaseIterable, Identifiable {
+    case today
+    case week
+    case month
+    case all
+    
+    var id: Self { self }
+    
+    var title: String {
+        switch self {
+        case .today: return "Today"
+        case .week: return "This Week"
+        case .month: return "This Month"
+        case .all: return "All Time"
+        }
+    }
+}
+
+// MARK: - Session Day Group
+
+private struct SessionDayGroup: Identifiable {
+    let id: Date
+    let date: Date
+    let sessions: [PomodoroSession]
+}
+
 struct CalendarView: View {
     @ObservedObject var viewModel: TimerViewModel
     @State private var currentMonth: Date = Date()
-    @State private var selectedDate: Date? = Date() // Default to today
-    @State private var isCalendarExpanded: Bool = false
+    @State private var selectedSpecificDate: Date? = nil
+    @State private var selectedRange: HistoryRange = .today
+    @State private var isCalendarPresented: Bool = false
     @State private var refreshTrigger: UUID = UUID()
     
     private let dataStore = PomodoroDataStore.shared
@@ -22,23 +51,133 @@ struct CalendarView: View {
         dataStore.getAllSessions().filter { $0.sessionType == .work }
     }
     
-    // Get sessions for selected date (or all if none selected)
-    private var filteredSessions: [PomodoroSession] {
-        guard let selectedDate = selectedDate else {
-            return workSessions
-        }
-        
-        let startOfDay = calendar.startOfDay(for: selectedDate)
-        let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: selectedDate) ?? selectedDate
-        
-        return workSessions.filter { session in
-            session.startTime >= startOfDay && session.startTime <= endOfDay
-        }
-    }
-    
     // Get dates that have sessions (for calendar indicators)
     private var datesWithSessions: Set<Date> {
         Set(workSessions.map { calendar.startOfDay(for: $0.startTime) })
+    }
+    
+    // Dates shown in the horizontal date strip (recent history window)
+    private var dateStripDays: [Date] {
+        guard let minSessionDate = workSessions.map({ $0.startTime }).min() else {
+            // No sessions yet – show just the last 7 days ending today
+            let today = calendar.startOfDay(for: Date())
+            let offsets = (-6)...0
+            return offsets.compactMap { offset in
+                calendar.date(byAdding: .day, value: offset, to: today)
+            }
+        }
+        
+        let today = calendar.startOfDay(for: Date())
+        let earliestAllowed = calendar.date(byAdding: .day, value: -60, to: today) ?? today
+        let stripStart = max(calendar.startOfDay(for: minSessionDate), earliestAllowed)
+        let stripEnd = today
+        
+        var days: [Date] = []
+        var current = stripStart
+        while current <= stripEnd {
+            days.append(current)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
+            current = next
+        }
+        return days
+    }
+    
+    // Date range for current selection (nil = all time)
+    private var currentDateRange: (start: Date, end: Date)? {
+        if let specific = selectedSpecificDate {
+            let startOfDay = calendar.startOfDay(for: specific)
+            let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: specific) ?? specific
+            return (startOfDay, endOfDay)
+        }
+        
+        switch selectedRange {
+        case .today:
+            let today = Date()
+            let startOfDay = calendar.startOfDay(for: today)
+            let endOfDay = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: today) ?? today
+            return (startOfDay, endOfDay)
+        case .week:
+            if let interval = calendar.dateInterval(of: .weekOfYear, for: Date()) {
+                return (interval.start, interval.end)
+            }
+            return nil
+        case .month:
+            if let interval = calendar.dateInterval(of: .month, for: Date()) {
+                return (interval.start, interval.end)
+            }
+            return nil
+        case .all:
+            return nil
+        }
+    }
+    
+    // Sessions filtered by current date range
+    private var filteredSessions: [PomodoroSession] {
+        guard let range = currentDateRange else {
+            return workSessions.sorted { $0.startTime > $1.startTime }
+        }
+        
+        return workSessions
+            .filter { session in
+                session.startTime >= range.start && session.startTime <= range.end
+            }
+            .sorted { $0.startTime > $1.startTime }
+    }
+    
+    // Sessions grouped by day for list sections
+    private var groupedSessions: [SessionDayGroup] {
+        let groupedDictionary: [Date: [PomodoroSession]] = Dictionary(
+            grouping: filteredSessions,
+            by: { session in
+                calendar.startOfDay(for: session.startTime)
+            }
+        )
+        
+        let groups: [SessionDayGroup] = groupedDictionary.map { entry in
+            let date = entry.key
+            let sessionsForDate = entry.value.sorted { lhs, rhs in
+                lhs.startTime > rhs.startTime
+            }
+            return SessionDayGroup(id: date, date: date, sessions: sessionsForDate)
+        }
+        
+        return groups.sorted { lhs, rhs in
+            lhs.date > rhs.date
+        }
+    }
+    
+    private var summaryTitle: String {
+        if let specific = selectedSpecificDate {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE, MMM d"
+            return formatter.string(from: specific)
+        }
+        
+        switch selectedRange {
+        case .today:
+            return "Today"
+        case .week:
+            return "This Week"
+        case .month:
+            return "This Month"
+        case .all:
+            return "All Sessions"
+        }
+    }
+    
+    private var summarySubtitle: String {
+        makeSummarySubtitle(for: filteredSessions)
+    }
+    
+    // Selected date to highlight in the strip
+    private var stripSelectedDate: Date? {
+        if let specific = selectedSpecificDate {
+            return calendar.startOfDay(for: specific)
+        }
+        if selectedRange == .today {
+            return calendar.startOfDay(for: Date())
+        }
+        return nil
     }
     
     var body: some View {
@@ -48,164 +187,257 @@ struct CalendarView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Calendar Grid (Collapsible)
-                    Group {
-                        if isCalendarExpanded {
-                            VStack(spacing: 0) {
-                                CalendarGridView(
-                                    currentMonth: $currentMonth,
-                                    selectedDate: $selectedDate,
-                                    datesWithSessions: datesWithSessions,
-                                    accentColor: viewModel.accentColor
-                                )
-                                .padding(.horizontal, 20)
-                                .padding(.top, 12)
-                                .padding(.bottom, 8)
-                                
-                                Divider()
-                                    .background(Color.gray.opacity(0.3))
-                                    .padding(.vertical, 12)
-                            }
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                        } else {
-                            // Compact Calendar Header (when collapsed)
-                            CompactCalendarHeader(
-                                currentMonth: $currentMonth,
-                                selectedDate: $selectedDate,
-                                datesWithSessions: datesWithSessions,
-                                accentColor: viewModel.accentColor,
-                                onExpand: {
-                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                        isCalendarExpanded = true
-                                    }
-                                }
-                            )
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-                    }
-                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isCalendarExpanded)
-                    
-                    // Sessions List
-                    if filteredSessions.isEmpty {
-                        // Empty state
-                        VStack(spacing: 12) {
-                            Image(systemName: "calendar.badge.exclamationmark")
-                                .font(.system(size: 48))
-                                .foregroundColor(.gray.opacity(0.5))
-                            
-                            Text(selectedDate == nil ? "No sessions yet" : "No sessions on this day")
-                                .font(.headline)
-                                .foregroundColor(.white.opacity(0.7))
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.top, 60)
-                    } else {
-                        VStack(spacing: 0) {
-                            // Header with Dropdown
-                            HStack {
-                                Menu {
-                                    Button(action: {
-                                        selectedDate = Date() // Today
-                                    }) {
-                                        HStack {
-                                            Text("Today")
-                                            if let selectedDate = selectedDate, calendar.isDateInToday(selectedDate) {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                    
-                                    Button(action: {
-                                        selectedDate = nil // All Sessions
-                                    }) {
-                                        HStack {
-                                            Text("All Sessions")
-                                            if selectedDate == nil {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Text(selectedDate == nil ? "All Sessions" : formatSelectedDateHeader(selectedDate!))
-                                            .font(.title2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                        
-                                        Image(systemName: "chevron.down")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                }
-                                
-                                Spacer()
-                                
-                                Text("\(filteredSessions.count) session\(filteredSessions.count == 1 ? "" : "s")")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.6))
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 8)
-                            .padding(.bottom, 12)
-                            
-                            // Session Cards List
-                            List {
-                                ForEach(filteredSessions) { session in
-                                    PomodoroSessionCard(
-                                        session: session,
-                                        accentColor: viewModel.accentColor
-                                    )
-                                    .listRowBackground(Color.clear)
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 16, trailing: 20))
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        if session.status == .cancelled {
-                                            Button(role: .destructive) {
-                                                deleteSession(session)
-                                            } label: {
-                                                Label("Delete", systemImage: "trash")
-                                            }
-                                        }
-                                    }
-                                }
-                                .id(refreshTrigger)
-                            }
-                            .listStyle(.plain)
-                            .scrollContentBackground(.hidden)
-                            .background(Color.black)
-                        }
-                    }
+                    rangeHeader
+                    Divider()
+                        .background(Color.gray.opacity(0.3))
+                        .padding(.horizontal, 20)
+                    sessionsContent
                 }
             }
             .navigationTitle("History")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            isCalendarExpanded.toggle()
+                    browseButton
+                }
+            }
+            .sheet(isPresented: $isCalendarPresented) {
+                calendarSheet
+            }
+        }
+    }
+    
+    private func totalFocusedMinutes(for sessions: [PomodoroSession]) -> Int {
+        sessions.reduce(0) { partialResult, session in
+            if let activeDuration = session.activeDurationMinutes {
+                return partialResult + Int(activeDuration)
+            } else if let actualDuration = session.actualDurationMinutes {
+                return partialResult + Int(actualDuration)
+            } else {
+                return partialResult + Int(session.plannedDurationMinutes)
+            }
+        }
+    }
+    
+    private func makeSummarySubtitle(for sessions: [PomodoroSession]) -> String {
+        let sessionCount = sessions.count
+        guard sessionCount > 0 else {
+            return "No sessions yet"
+        }
+        
+        let totalMinutes = totalFocusedMinutes(for: sessions)
+        let dayStartDates = sessions.map { calendar.startOfDay(for: $0.startTime) }
+        let distinctDays = Set<Date>(dayStartDates).count
+        let streakDays = currentStreakDays()
+        
+        var parts: [String] = []
+        parts.append("\(sessionCount) session\(sessionCount == 1 ? "" : "s")")
+        parts.append("\(totalMinutes) min focused")
+        
+        if distinctDays > 1 {
+            parts.append("\(distinctDays) days active")
+        }
+        
+        if streakDays > 1 {
+            parts.append("Streak: \(streakDays) days")
+        }
+        
+        return parts.joined(separator: " • ")
+    }
+
+    private func currentStreakDays() -> Int {
+        // Streak is based on any day with at least one session, counting back from today
+        let allSessionDays: Set<Date> = Set(workSessions.map { calendar.startOfDay(for: $0.startTime) })
+        guard !allSessionDays.isEmpty else { return 0 }
+        
+        var streak = 0
+        var currentDay = calendar.startOfDay(for: Date())
+        
+        while allSessionDays.contains(currentDay) {
+            streak += 1
+            guard let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDay) else {
+                break
+            }
+            currentDay = previousDay
+        }
+        
+        return streak
+    }
+
+    // MARK: - Subviews
+    
+    private var rangeHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Range", selection: $selectedRange) {
+                ForEach(HistoryRange.allCases) { range in
+                    Text(range.title)
+                        .tag(range)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: selectedRange) { _ in
+                // Clear specific day selection when changing base range
+                selectedSpecificDate = nil
+            }
+            
+            DateStripView(
+                dates: dateStripDays,
+                selectedDate: stripSelectedDate,
+                datesWithSessions: datesWithSessions,
+                calendar: calendar,
+                accentColor: viewModel.accentColor
+            ) { date in
+                // Tapping a pill focuses on that specific day
+                selectedSpecificDate = date
+                selectedRange = .today
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summaryTitle)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                Text(summarySubtitle)
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 12)
+    }
+    
+    @ViewBuilder
+    private var sessionsContent: some View {
+        if filteredSessions.isEmpty {
+            emptySessionsView
+        } else {
+            sessionsListView
+        }
+    }
+    
+    private var emptySessionsView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.system(size: 48))
+                .foregroundColor(.gray.opacity(0.5))
+            
+            Text("No sessions in this range yet")
+                .font(.headline)
+                .foregroundColor(.white.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 60)
+    }
+    
+    private var sessionsListView: some View {
+        List {
+            ForEach(groupedSessions) { group in
+                sectionView(for: group)
+            }
+        }
+        .id(refreshTrigger)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.black)
+    }
+
+    private func sectionView(for group: SessionDayGroup) -> some View {
+        Section(
+            header: DayHeaderView(
+                date: group.date,
+                sessions: group.sessions,
+                calendar: calendar
+            )
+        ) {
+            ForEach(group.sessions) { session in
+                PomodoroSessionCard(
+                    session: session,
+                    accentColor: viewModel.accentColor
+                )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 0,
+                        leading: 20,
+                        bottom: 16,
+                        trailing: 20
+                    )
+                )
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    if session.status == .cancelled {
+                        Button(role: .destructive) {
+                            deleteSession(session)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
-                    }) {
-                        Image(systemName: isCalendarExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(viewModel.accentColor)
                     }
                 }
             }
         }
     }
     
-    private func formatSelectedDateHeader(_ date: Date) -> String {
-        if calendar.isDateInToday(date) {
-            return "Today"
-        } else if calendar.isDateInYesterday(date) {
-            return "Yesterday"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE, MMM d"
-            return formatter.string(from: date)
+    private var browseButton: some View {
+        Button {
+            isCalendarPresented = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                Text("Browse")
+            }
+            .font(.subheadline)
+            .foregroundColor(viewModel.accentColor)
+        }
+    }
+    
+    private var calendarSheet: some View {
+        NavigationView {
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    CalendarGridView(
+                        currentMonth: $currentMonth,
+                        selectedDate: Binding(
+                            get: { selectedSpecificDate },
+                            set: { newValue in
+                                selectedSpecificDate = newValue
+                            }
+                        ),
+                        datesWithSessions: datesWithSessions,
+                        accentColor: viewModel.accentColor,
+                        onDaySelected: { _ in
+                            // When a day is selected, dismiss and use that specific date
+                            isCalendarPresented = false
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
+                    
+                    Spacer()
+                }
+            }
+            .navigationTitle("Browse History")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        isCalendarPresented = false
+                    }
+                    .foregroundColor(.white)
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Clear") {
+                        selectedSpecificDate = nil
+                        isCalendarPresented = false
+                    }
+                    .foregroundColor(viewModel.accentColor)
+                }
+            }
         }
     }
     
@@ -223,6 +455,7 @@ struct CalendarGridView: View {
     @Binding var selectedDate: Date?
     let datesWithSessions: Set<Date>
     let accentColor: Color
+    let onDaySelected: ((Date) -> Void)?
     
     private let calendar = Calendar.current
     private let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
@@ -329,12 +562,13 @@ struct CalendarGridView: View {
                             accentColor: accentColor
                         ) {
                             withAnimation {
-                                if selectedDate != nil && calendar.isDate(selectedDate!, inSameDayAs: date) {
+                                if let currentSelected = selectedDate, calendar.isDate(currentSelected, inSameDayAs: date) {
                                     selectedDate = nil
                                 } else {
                                     selectedDate = date
                                 }
                             }
+                            onDaySelected?(date)
                         }
                     } else {
                         // Empty cell
@@ -342,84 +576,6 @@ struct CalendarGridView: View {
                             .frame(height: 32)
                     }
                 }
-            }
-        }
-    }
-}
-
-// MARK: - Compact Calendar Header
-
-struct CompactCalendarHeader: View {
-    @Binding var currentMonth: Date
-    @Binding var selectedDate: Date?
-    let datesWithSessions: Set<Date>
-    let accentColor: Color
-    let onExpand: () -> Void
-    
-    private let calendar = Calendar.current
-    
-    private var monthYearString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: currentMonth)
-    }
-    
-    private var selectedDateString: String {
-        guard let selectedDate = selectedDate else { return "" }
-        if calendar.isDateInToday(selectedDate) {
-            return "Today"
-        } else if calendar.isDateInYesterday(selectedDate) {
-            return "Yesterday"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: selectedDate)
-        }
-    }
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(monthYearString)
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
-                    if let selectedDate = selectedDate {
-                        Text("•")
-                            .foregroundColor(.white.opacity(0.5))
-                        
-                        Text(selectedDateString)
-                            .font(.subheadline)
-                            .foregroundColor(accentColor)
-                    }
-                }
-                
-                if !datesWithSessions.isEmpty {
-                    Text("\(datesWithSessions.count) day\(datesWithSessions.count == 1 ? "" : "s") with sessions")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-            }
-            
-            Spacer()
-            
-            Button(action: onExpand) {
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 14, weight: .medium))
-                    Text("Show Calendar")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                }
-                .foregroundColor(accentColor)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(accentColor.opacity(0.15))
-                )
             }
         }
     }
@@ -632,7 +788,192 @@ struct PomodoroSessionCard: View {
     }
 }
 
+// MARK: - Day Header View
+
+private struct DayHeaderView: View {
+    let date: Date
+    let sessions: [PomodoroSession]
+    let calendar: Calendar
+    
+    private var title: String {
+        if calendar.isDateInToday(date) {
+            return "Today"
+        } else if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE, MMM d"
+            return formatter.string(from: date)
+        }
+    }
+    
+    private var subtitle: String {
+        let count = sessions.count
+        let minutes = sessions.reduce(0) { total, session in
+            if let activeDuration = session.activeDurationMinutes {
+                return total + Int(activeDuration)
+            } else if let actualDuration = session.actualDurationMinutes {
+                return total + Int(actualDuration)
+            } else {
+                return total + Int(session.plannedDurationMinutes)
+            }
+        }
+        
+        return "\(count) session\(count == 1 ? "" : "s") • \(minutes) min"
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.white)
+            
+            Text(subtitle)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .padding(.leading, 20)
+        .padding(.bottom, 4)
+        .background(Color.black)
+    }
+}
+
+// MARK: - Date Strip
+
+private struct DateStripView: View {
+    let dates: [Date]
+    let selectedDate: Date?
+    let datesWithSessions: Set<Date>
+    let calendar: Calendar
+    let accentColor: Color
+    let onSelect: (Date) -> Void
+    
+    private var weekdayFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return formatter
+    }
+    
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(dates, id: \.self) { date in
+                    let dayStart = calendar.startOfDay(for: date)
+                    let isSelected = selectedDate.map { calendar.isDate($0, inSameDayAs: dayStart) } ?? false
+                    let isToday = calendar.isDateInToday(dayStart)
+                    let hasSessions = datesWithSessions.contains(dayStart)
+                    let isFuture = dayStart > calendar.startOfDay(for: Date())
+                    
+                    DatePillView(
+                        date: date,
+                        weekdayFormatter: weekdayFormatter,
+                        isSelected: isSelected,
+                        isToday: isToday,
+                        hasSessions: hasSessions,
+                        isFuture: isFuture,
+                        accentColor: accentColor
+                    ) {
+                        onSelect(dayStart)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+private struct DatePillView: View {
+    let date: Date
+    let weekdayFormatter: DateFormatter
+    let isSelected: Bool
+    let isToday: Bool
+    let hasSessions: Bool
+    let isFuture: Bool
+    let accentColor: Color
+    let action: () -> Void
+    
+    private var dayNumber: String {
+        let day = Calendar.current.component(.day, from: date)
+        return String(day)
+    }
+    
+    private var weekdayText: String {
+        weekdayFormatter.string(from: date)
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Text(weekdayText)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(labelColor)
+                
+                ZStack {
+                    Circle()
+                        .strokeBorder(borderColor, lineWidth: isSelected ? 2 : 1)
+                        .background(
+                            Circle()
+                                .fill(backgroundColor)
+                        )
+                        .frame(width: 32, height: 32)
+                    
+                    Text(dayNumber)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(numberColor)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var labelColor: Color {
+        if isSelected {
+            return .white
+        }
+        if isToday {
+            return accentColor
+        }
+        if isFuture {
+            return .white.opacity(0.3)
+        }
+        return .white.opacity(0.6)
+    }
+    
+    private var borderColor: Color {
+        if isSelected {
+            return .clear
+        }
+        if isToday {
+            return accentColor
+        }
+        if hasSessions {
+            return accentColor.opacity(0.6)
+        }
+        return .white.opacity(0.2)
+    }
+    
+    private var backgroundColor: Color {
+        if isSelected {
+            return .white
+        }
+        return .clear
+    }
+    
+    private var numberColor: Color {
+        if isSelected {
+            return .black
+        }
+        if isToday {
+            return accentColor
+        }
+        if isFuture {
+            return .white.opacity(0.3)
+        }
+        return hasSessions ? .white : .white.opacity(0.7)
+    }
+}
+
 #Preview {
     CalendarView(viewModel: TimerViewModel())
 }
-
