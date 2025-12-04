@@ -916,6 +916,7 @@ struct CollapsibleCategoryGoalsSection: View {
                             )
                             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                         
                         // Categories without goals
@@ -948,6 +949,7 @@ struct CollapsibleCategoryGoalsSection: View {
                             )
                             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                     }
                     .listStyle(.plain)
