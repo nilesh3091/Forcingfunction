@@ -40,6 +40,7 @@ struct StatsView: View {
     @State private var showingGoalPicker = false
     @State private var showingCategoryGoalPicker: CategoryGoalPickerItem? = nil
     @State private var showingCreateCategory = false
+    @State private var showingEditCategory: Category? = nil
     @State private var refreshTrigger: Int = 0 // Force view refresh when goals change
     @State private var isCategoryGoalsExpanded = true // Always expanded/visible
     @State private var isArchivedGoalsExpanded = false // Start collapsed
@@ -197,6 +198,9 @@ struct StatsView: View {
                             onSetGoal: { categoryId in
                                 showingCategoryGoalPicker = CategoryGoalPickerItem(categoryId)
                             },
+                            onEditCategory: { category in
+                                showingEditCategory = category
+                            },
                             onAddCategory: {
                                 showingCreateCategory = true
                             },
@@ -222,6 +226,9 @@ struct StatsView: View {
                                 },
                                 onSetGoal: { categoryId in
                                     showingCategoryGoalPicker = CategoryGoalPickerItem(categoryId)
+                                },
+                                onEditCategory: { category in
+                                    showingEditCategory = category
                                 },
                                 onAddCategory: nil,
                                 isArchived: true
@@ -278,6 +285,26 @@ struct StatsView: View {
                 accentColor: viewModel.accentColor,
                 onGoalChanged: {
                     refreshTrigger += 1
+                },
+                onEditCategory: {
+                    if let category = categoryManager.getCategory(byId: item.id) {
+                        showingEditCategory = category
+                    }
+                },
+                onArchive: {
+                    if let category = categoryManager.getCategory(byId: item.id) {
+                        categoryManager.archiveCategory(category)
+                        NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
+                        refreshTrigger += 1
+                    }
+                },
+                onDelete: {
+                    if let category = categoryManager.getCategory(byId: item.id) {
+                        categoryManager.deleteCategory(category)
+                        UserDefaults.standard.removeCategoryWeeklyGoal(categoryId: item.id)
+                        NotificationCenter.default.post(name: .categoriesDidChange, object: nil)
+                        refreshTrigger += 1
+                    }
                 }
             )
         }
@@ -286,6 +313,23 @@ struct StatsView: View {
                 accentColor: viewModel.accentColor,
                 onSave: { name, color in
                     _ = categoryManager.createCategory(name: name, color: color)
+                    refreshTrigger += 1
+                }
+            )
+            .onDisappear {
+                // Refresh when sheet dismisses to ensure we catch any changes
+                refreshTrigger += 1
+            }
+        }
+        .sheet(item: $showingEditCategory) { category in
+            CreateEditCategoryView(
+                category: category,
+                accentColor: viewModel.accentColor,
+                onSave: { name, color in
+                    var updatedCategory = category
+                    updatedCategory.name = name
+                    updatedCategory.color = color
+                    categoryManager.updateCategory(updatedCategory)
                     refreshTrigger += 1
                 }
             )
@@ -672,6 +716,7 @@ struct CollapsibleCategoryGoalsSection: View {
     let accentColor: Color
     let currentWeekCompletedMinutes: (UUID) -> Int
     let onSetGoal: (UUID) -> Void
+    let onEditCategory: ((Category) -> Void)?
     let onAddCategory: (() -> Void)?
     var isArchived: Bool = false
     var isCollapsible: Bool = true // Default to collapsible for backwards compatibility
@@ -847,9 +892,15 @@ struct CollapsibleCategoryGoalsSection: View {
                                 completedMinutes: currentWeekCompletedMinutes(categoryGoal.category.id),
                                 accentColor: accentColor,
                                 isArchived: isArchived,
-                                onEdit: {
+                                onTap: {
                                     onSetGoal(categoryGoal.category.id)
                                 },
+                                onEditGoal: {
+                                    onSetGoal(categoryGoal.category.id)
+                                },
+                                onEditCategory: !isArchived ? {
+                                    onEditCategory?(categoryGoal.category)
+                                } : nil,
                                 onArchive: !isArchived ? {
                                     categoryManager.archiveCategory(categoryGoal.category)
                                     // Trigger refresh
@@ -873,9 +924,15 @@ struct CollapsibleCategoryGoalsSection: View {
                                 category: category,
                                 accentColor: accentColor,
                                 isArchived: isArchived,
+                                onTap: {
+                                    onSetGoal(category.id)
+                                },
                                 onSetGoal: {
                                     onSetGoal(category.id)
                                 },
+                                onEditCategory: !isArchived ? {
+                                    onEditCategory?(category)
+                                } : nil,
                                 onArchive: !isArchived ? {
                                     categoryManager.archiveCategory(category)
                                     // Trigger refresh
@@ -1128,7 +1185,9 @@ struct CompactCategoryGoalRow: View {
     let completedMinutes: Int
     let accentColor: Color
     let isArchived: Bool
-    let onEdit: () -> Void
+    let onTap: () -> Void
+    let onEditGoal: () -> Void
+    let onEditCategory: (() -> Void)?
     let onArchive: (() -> Void)?
     let onDelete: (() -> Void)?
     
@@ -1179,11 +1238,41 @@ struct CompactCategoryGoalRow: View {
                         .foregroundColor(.white.opacity(0.6))
                 }
                 
-                // Edit button
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.caption)
-                        .foregroundColor(accentColor)
+                // Edit menu button (only for active categories)
+                if !isArchived, let onEditCategory = onEditCategory {
+                    Menu {
+                        Button(action: onEditGoal) {
+                            Label("Edit Goal", systemImage: "target")
+                        }
+                        Button(action: onEditCategory) {
+                            Label("Edit Category", systemImage: "pencil")
+                        }
+                        
+                        Divider()
+                        
+                        if let onArchive = onArchive {
+                            Button(role: .destructive, action: onArchive) {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                        }
+                        
+                        if let onDelete = onDelete {
+                            Button(role: .destructive, action: onDelete) {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.caption)
+                            .foregroundColor(accentColor)
+                    }
+                } else {
+                    // Edit goal button (for archived categories or when edit category is not available)
+                    Button(action: onEditGoal) {
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                            .foregroundColor(accentColor)
+                    }
                 }
             }
             
@@ -1218,6 +1307,10 @@ struct CompactCategoryGoalRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.gray.opacity(isArchived ? 0.05 : 0.1))
         )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap()
+        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // Delete button (always available)
             if let onDelete = onDelete {
@@ -1247,7 +1340,9 @@ struct CompactCategoryNoGoalRow: View {
     let category: Category
     let accentColor: Color
     let isArchived: Bool
+    let onTap: () -> Void
     let onSetGoal: () -> Void
+    let onEditCategory: (() -> Void)?
     let onArchive: (() -> Void)?
     let onDelete: (() -> Void)?
     
@@ -1265,15 +1360,45 @@ struct CompactCategoryNoGoalRow: View {
             
             Spacer()
             
-            // Set Goal button
-            Button(action: onSetGoal) {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus.circle")
+            // Menu button (only for active categories)
+            if !isArchived, let onEditCategory = onEditCategory {
+                Menu {
+                    Button(action: onSetGoal) {
+                        Label("Set Goal", systemImage: "target")
+                    }
+                    Button(action: onEditCategory) {
+                        Label("Edit Category", systemImage: "pencil")
+                    }
+                    
+                    Divider()
+                    
+                    if let onArchive = onArchive {
+                        Button(role: .destructive, action: onArchive) {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                    }
+                    
+                    if let onDelete = onDelete {
+                        Button(role: .destructive, action: onDelete) {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                         .font(.caption)
-                    Text("Set Goal")
-                        .font(.caption)
+                        .foregroundColor(accentColor)
                 }
-                .foregroundColor(accentColor)
+            } else {
+                // Set Goal button (for archived categories)
+                Button(action: onSetGoal) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle")
+                            .font(.caption)
+                        Text("Set Goal")
+                            .font(.caption)
+                    }
+                    .foregroundColor(accentColor)
+                }
             }
         }
         .padding(12)
@@ -1283,7 +1408,7 @@ struct CompactCategoryNoGoalRow: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            onSetGoal()
+            onTap()
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // Delete button (always available)
@@ -1315,7 +1440,20 @@ struct CategoryGoalPickerView: View {
     let categoryName: String
     let accentColor: Color
     let onGoalChanged: () -> Void
+    let onEditCategory: (() -> Void)?
+    let onArchive: (() -> Void)?
+    let onDelete: (() -> Void)?
     @Environment(\.dismiss) var dismiss
+    
+    private let categoryManager = CategoryManager.shared
+    
+    private var category: Category? {
+        categoryManager.getCategory(byId: categoryId)
+    }
+    
+    private var isArchived: Bool {
+        category?.isArchived ?? false
+    }
     
     @State private var selectedHours: Int = 0
     @State private var selectedMinutes: Int = 0
@@ -1395,7 +1533,7 @@ struct CategoryGoalPickerView: View {
                                 }
                             }
                             .pickerStyle(.wheel)
-                            .frame(width: 100)
+                            .frame(width: 100, height: 120)
                             .clipped()
                         }
                         
@@ -1411,12 +1549,13 @@ struct CategoryGoalPickerView: View {
                                 }
                             }
                             .pickerStyle(.wheel)
-                            .frame(width: 100)
+                            .frame(width: 100, height: 120)
                             .clipped()
                         }
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
+                    .frame(height: 180)
                     
                     // Preview of total
                     VStack(spacing: 8) {
@@ -1433,40 +1572,111 @@ struct CategoryGoalPickerView: View {
                     
                     Spacer()
                     
-                    // Action buttons
-                    HStack(spacing: 12) {
-                        // Remove goal button (if goal exists)
-                        if currentGoalMinutes > 0 {
+                    // Category Management Buttons
+                    VStack(spacing: 12) {
+                        // Edit Category Name button
+                        if let onEditCategory = onEditCategory, !isArchived {
                             Button(action: {
-                                saveGoal(0)
-                                WidgetDataManager.shared.updateWidgetData()
-                                onGoalChanged()
                                 dismiss()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    onEditCategory()
+                                }
                             }) {
-                                Text("Remove Goal")
-                                    .font(.headline)
-                                    .foregroundColor(.red)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
-                                    .background(Color.red.opacity(0.2))
-                                    .cornerRadius(12)
-                            }
-                        }
-                        
-                        // Save button
-                        Button(action: {
-                            saveGoal(selectedHours * 60 + selectedMinutes)
-                            WidgetDataManager.shared.updateWidgetData()
-                            onGoalChanged()
-                            dismiss()
-                        }) {
-                            Text("Set Goal")
+                                HStack {
+                                    Image(systemName: "pencil")
+                                    Text("Edit Category Name")
+                                }
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                .background(accentColor)
+                                .background(Color.gray.opacity(0.2))
                                 .cornerRadius(12)
+                            }
+                        }
+                        
+                        // Goal action buttons
+                        HStack(spacing: 12) {
+                            // Remove goal button (if goal exists)
+                            if currentGoalMinutes > 0 {
+                                Button(action: {
+                                    saveGoal(0)
+                                    WidgetDataManager.shared.updateWidgetData()
+                                    onGoalChanged()
+                                    dismiss()
+                                }) {
+                                    Text("Remove Goal")
+                                        .font(.headline)
+                                        .foregroundColor(.red)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(Color.red.opacity(0.2))
+                                        .cornerRadius(12)
+                                }
+                            }
+                            
+                            // Save/Set Goal button
+                            Button(action: {
+                                saveGoal(selectedHours * 60 + selectedMinutes)
+                                WidgetDataManager.shared.updateWidgetData()
+                                onGoalChanged()
+                                dismiss()
+                            }) {
+                                Text(currentGoalMinutes > 0 ? "Update Goal" : "Set Goal")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(accentColor)
+                                    .cornerRadius(12)
+                            }
+                        }
+                        
+                        // Archive and Delete buttons
+                        if !isArchived {
+                            HStack(spacing: 12) {
+                                // Archive button
+                                if let onArchive = onArchive {
+                                    Button(action: {
+                                        dismiss()
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            onArchive()
+                                        }
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "archivebox")
+                                            Text("Archive")
+                                        }
+                                        .font(.headline)
+                                        .foregroundColor(.orange)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(Color.orange.opacity(0.2))
+                                        .cornerRadius(12)
+                                    }
+                                }
+                                
+                                // Delete button
+                                if let onDelete = onDelete {
+                                    Button(action: {
+                                        dismiss()
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            onDelete()
+                                        }
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "trash")
+                                            Text("Delete")
+                                        }
+                                        .font(.headline)
+                                        .foregroundColor(.red)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(Color.red.opacity(0.2))
+                                        .cornerRadius(12)
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 20)
