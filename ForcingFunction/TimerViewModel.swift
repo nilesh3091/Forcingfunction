@@ -84,15 +84,14 @@ class TimerViewModel: ObservableObject {
         ThemeColor(rawValue: themeColorString) ?? .red
     }
     
+    /// Centralized theme system - use this for all styling
+    var theme: AppTheme {
+        themeColor.theme
+    }
+    
+    /// Accent color (backward compatibility - use theme.accentColor instead)
     var accentColor: Color {
-        switch themeColor {
-        case .red:
-            return .red
-        case .blue:
-            return .blue
-        case .green:
-            return .green
-        }
+        theme.accentColor
     }
     
     var minMinutes: Double {

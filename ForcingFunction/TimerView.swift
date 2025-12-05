@@ -271,10 +271,15 @@ struct TimerView: View {
     // Haptic feedback constants
     private let hapticThrottleInterval: TimeInterval = 0.05  // Max 20 Hz for continuous feedback
     
+    // Theme access
+    private var theme: AppTheme {
+        viewModel.theme
+    }
+    
     var body: some View {
         ZStack {
             // Dark background
-            Color.black
+            theme.background(.primary)
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
@@ -283,7 +288,7 @@ struct TimerView: View {
                     // Focus time display
                     Text(AngleUtilities.formatFocusTime(viewModel.totalFocusMinutes))
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(theme.text(.secondary))
                     
                     Spacer()
                 }
@@ -296,7 +301,7 @@ struct TimerView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Your day :")
                         .font(.system(size: 19, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(theme.text(.primary))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.leading, 20)
                     
@@ -305,32 +310,33 @@ struct TimerView: View {
                         HStack {
                             Text("\(Int(dayProgress * 100))%")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(theme.text(.secondary))
                             
                             Spacer()
                             
                             Text(formatTodayFocusTime())
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(theme.text(.secondary))
                         }
                         
                         GeometryReader { geometry in
                             ZStack(alignment: .leading) {
                                 // Background bar
                                 RoundedRectangle(cornerRadius: 5)
-                                    .fill(Color.white.opacity(0.2))
+                                    .fill(theme.borderPrimary)
                                     .frame(height: 10)
                                 
                                 // Progress bar
                                 RoundedRectangle(cornerRadius: 5)
-                                    .fill(viewModel.accentColor)
+                                    .fill(theme.accentColor)
                                     .frame(width: geometry.size.width * dayProgress, height: 10)
                                     .animation(.linear(duration: 60.0), value: dayProgress)
                                 
                                 // Green blocks for completed work sessions
                                 SessionBlocksOverlay(
                                     geometry: geometry,
-                                    dayProgress: dayProgress
+                                    dayProgress: dayProgress,
+                                    theme: theme
                                 )
                             }
                         }
@@ -342,7 +348,7 @@ struct TimerView: View {
                                 ForEach(generateTimeMarkers(), id: \.hour) { marker in
                                     Text(marker.label)
                                         .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.6))
+                                        .foregroundColor(theme.text(.tertiary))
                                         .fixedSize()
                                         .frame(width: 30, alignment: .center)
                                         .offset(x: geometry.size.width * marker.position - 15)
@@ -365,7 +371,7 @@ struct TimerView: View {
                 ZStack {
                     // Outer ring with tick marks
                     Circle()
-                        .stroke(Color.white.opacity(0.2), lineWidth: 2)
+                        .stroke(theme.borderPrimary, lineWidth: 2)
                         .frame(width: dialSize, height: dialSize)
                     
                     // Swept area fill (pie slice showing covered area)
@@ -387,7 +393,7 @@ struct TimerView: View {
                         SweptAreaView(
                             totalAngle: pieAngle,
                             dialSize: dialSize,
-                            color: viewModel.accentColor  // Full opacity solid color
+                            color: theme.accentColor  // Full opacity solid color
                         )
                     }
                     
@@ -399,7 +405,7 @@ struct TimerView: View {
                         let tickWidth: CGFloat = isMajorTick ? 2 : 1
                         
                         Rectangle()
-                            .fill(Color.white.opacity(0.5))
+                            .fill(theme.text(.tertiary))
                             .frame(width: tickWidth, height: tickLength)
                             .offset(y: -dialSize / 2 + tickLength / 2)
                             .rotationEffect(.degrees(angle))
@@ -410,7 +416,7 @@ struct TimerView: View {
                         Circle()
                             .trim(from: 0, to: viewModel.progress)
                             .stroke(
-                                viewModel.accentColor,
+                                theme.accentColor,
                                 style: StrokeStyle(lineWidth: 8, lineCap: .round)
                             )
                             .frame(width: dialSize, height: dialSize)
@@ -437,7 +443,7 @@ struct TimerView: View {
                     
                     // Hand line
                     Rectangle()
-                        .fill(Color.white)
+                        .fill(theme.text(.primary))
                         .frame(width: 5, height: handLength)
                         .offset(y: -handLength / 2)
                         .rotationEffect(.degrees(handAngle))
@@ -445,12 +451,12 @@ struct TimerView: View {
                     
                     // Center knob
                     Circle()
-                        .fill(Color.white)
+                        .fill(theme.text(.primary))
                         .frame(width: knobSize, height: knobSize)
-                        .shadow(color: isDragging ? viewModel.accentColor.opacity(0.8) : Color.clear, radius: 15)
+                        .shadow(color: isDragging ? theme.accent(opacity: 0.8) : Color.clear, radius: 15)
                         .overlay(
                             Circle()
-                                .stroke(viewModel.accentColor, lineWidth: 2)
+                                .stroke(theme.accentColor, lineWidth: 2)
                                 .frame(width: knobSize, height: knobSize)
                         )
                         .scaleEffect(isDragging ? 1.1 : 1.0)
@@ -579,7 +585,7 @@ struct TimerView: View {
                     
                     Text(timeText)
                         .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(theme.text(.primary))
                         .monospacedDigit()
                         .accessibilityLabel("Remaining time: \(timeText)")
                     
@@ -588,11 +594,11 @@ struct TimerView: View {
                        let _ = TaskDataStore.shared.getTask(byId: taskId) {
                         Text("Task active")
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(viewModel.accentColor)
+                            .foregroundColor(theme.accentColor)
                     } else {
                         Text("session interval")
                             .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(theme.text(.tertiary))
                     }
                 }
                 .padding(.top, 30)
@@ -608,10 +614,10 @@ struct TimerView: View {
                         }) {
                             Text("Reset")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.buttonSecondaryText)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                .background(Color.gray.opacity(0.3))
+                                .background(theme.buttonSecondary)
                                 .cornerRadius(12)
                         }
                         .accessibilityLabel("Reset timer")
@@ -626,12 +632,12 @@ struct TimerView: View {
                         }) {
                             Text(viewModel.timerState == .running ? "Pause" : "Resume")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.buttonPrimaryText)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                .background(viewModel.accentColor)
+                                .background(theme.buttonPrimary)
                                 .cornerRadius(12)
-                                .shadow(color: viewModel.accentColor.opacity(0.5), radius: 10)
+                                .shadow(color: theme.accent(opacity: 0.5), radius: 10)
                         }
                         .accessibilityLabel(viewModel.timerState == .running ? "Pause timer" : "Resume timer")
                     } else {
@@ -641,12 +647,12 @@ struct TimerView: View {
                         }) {
                             Text("START SESSION")
                                 .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.buttonPrimaryText)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 18)
-                                .background(viewModel.accentColor)
+                                .background(theme.buttonPrimary)
                                 .cornerRadius(16)
-                                .shadow(color: viewModel.accentColor.opacity(0.6), radius: 15)
+                                .shadow(color: theme.accent(opacity: 0.6), radius: 15)
                         }
                         .accessibilityLabel("Start session")
                     }
@@ -864,6 +870,7 @@ struct SweptAreaView: View {
 struct SessionBlocksOverlay: View {
     let geometry: GeometryProxy
     let dayProgress: Double
+    let theme: AppTheme
     
     private var todaySessions: [PomodoroSession] {
         let calendar = Calendar.current
@@ -976,7 +983,8 @@ struct SessionBlocksOverlay: View {
                         geometry: geometry,
                         session: session,
                         position: position,
-                        blockWidth: calculateBlockWidth(for: session)
+                        blockWidth: calculateBlockWidth(for: session),
+                        theme: theme
                     )
                 }
             }
@@ -989,13 +997,14 @@ struct SessionBlockView: View {
     let session: PomodoroSession
     let position: Double
     let blockWidth: CGFloat
+    let theme: AppTheme
     
     var body: some View {
         // Center the block at the completion time position
         let xPosition = geometry.size.width * position
         
         RoundedRectangle(cornerRadius: 1)
-            .fill(Color.green)
+            .fill(theme.success)
             .frame(width: blockWidth, height: 10)
             .offset(x: xPosition - blockWidth / 2, y: 0)
     }
@@ -1009,6 +1018,10 @@ struct CategoryPickerView: View {
     @State private var refreshTrigger = UUID()
     
     private let categoryManager = CategoryManager.shared
+    
+    private var theme: AppTheme {
+        viewModel.theme
+    }
     
     private var isDisabled: Bool {
         viewModel.timerState != .idle
@@ -1038,6 +1051,7 @@ struct CategoryPickerView: View {
                     color: .gray,
                     isSelected: viewModel.selectedCategoryId == nil,
                     isDisabled: isDisabled,
+                    theme: theme,
                     action: {
                         guard !isDisabled else { return }
                         viewModel.selectedCategoryId = nil
@@ -1051,6 +1065,7 @@ struct CategoryPickerView: View {
                         color: category.color.color,
                         isSelected: viewModel.selectedCategoryId == category.id,
                         isDisabled: isDisabled,
+                        theme: theme,
                         action: {
                             guard !isDisabled else { return }
                             viewModel.selectedCategoryId = category.id
@@ -1077,6 +1092,7 @@ struct CategoryChipView: View {
     let color: Color
     let isSelected: Bool
     let isDisabled: Bool
+    let theme: AppTheme
     let action: () -> Void
     
     var body: some View {
@@ -1090,8 +1106,8 @@ struct CategoryChipView: View {
                         Circle()
                             .stroke(
                                 isSelected && !isDisabled
-                                    ? Color.white.opacity(0.4)
-                                    : Color.white.opacity(0.15),
+                                    ? theme.text(.primary).opacity(0.4)
+                                    : theme.text(.tertiary),
                                 lineWidth: isSelected && !isDisabled ? 1 : 0.5
                             )
                     )
@@ -1107,8 +1123,8 @@ struct CategoryChipView: View {
                     .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                     .foregroundColor(
                         isDisabled
-                            ? .white.opacity(0.4)
-                            : (isSelected ? .white : .white.opacity(0.8))
+                            ? theme.text(.disabled)
+                            : (isSelected ? theme.text(.primary) : theme.text(.secondary))
                     )
             }
             .padding(.horizontal, 8)
@@ -1118,14 +1134,14 @@ struct CategoryChipView: View {
                     .fill(
                         isSelected && !isDisabled
                             ? color.opacity(0.2)
-                            : Color.gray.opacity(isDisabled ? 0.08 : 0.12)
+                            : theme.background(.card)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(
                                 isSelected && !isDisabled
                                     ? color.opacity(0.6)
-                                    : Color.gray.opacity(isDisabled ? 0.15 : 0.25),
+                                    : theme.borderSecondary,
                                 lineWidth: isSelected && !isDisabled ? 1 : 0.5
                             )
                     )

@@ -12,6 +12,10 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     @Environment(\.openURL) private var openURL
     
+    private var theme: AppTheme {
+        viewModel.theme
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Swipeable pages
@@ -45,7 +49,7 @@ struct MainTabView: View {
                     systemImage: "clock.fill",
                     index: 0,
                     selectedTab: $selectedTab,
-                    accentColor: viewModel.accentColor
+                    theme: theme
                 )
                 
                 TabBarButton(
@@ -53,7 +57,7 @@ struct MainTabView: View {
                     systemImage: "clock.arrow.circlepath",
                     index: 1,
                     selectedTab: $selectedTab,
-                    accentColor: viewModel.accentColor
+                    theme: theme
                 )
                 
                 TabBarButton(
@@ -61,7 +65,7 @@ struct MainTabView: View {
                     systemImage: "chart.bar.fill",
                     index: 2,
                     selectedTab: $selectedTab,
-                    accentColor: viewModel.accentColor
+                    theme: theme
                 )
                 
                 TabBarButton(
@@ -69,7 +73,7 @@ struct MainTabView: View {
                     systemImage: "checklist",
                     index: 3,
                     selectedTab: $selectedTab,
-                    accentColor: viewModel.accentColor
+                    theme: theme
                 )
                 
                 TabBarButton(
@@ -77,12 +81,12 @@ struct MainTabView: View {
                     systemImage: "gearshape.fill",
                     index: 4,
                     selectedTab: $selectedTab,
-                    accentColor: viewModel.accentColor
+                    theme: theme
                 )
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 4)
-            .background(Color(.systemBackground).opacity(0.95))
+            .background(theme.background(.secondary).opacity(0.95))
         }
         .preferredColorScheme(.dark)
         .accentColor(viewModel.accentColor)
@@ -100,7 +104,7 @@ private struct TabBarButton: View {
     let systemImage: String
     let index: Int
     @Binding var selectedTab: Int
-    let accentColor: Color
+    let theme: AppTheme
     
     var body: some View {
         Button {
@@ -116,10 +120,10 @@ private struct TabBarButton: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)
-            .foregroundColor(selectedTab == index ? accentColor : .secondary)
+            .foregroundColor(selectedTab == index ? theme.accentColor : theme.text(.secondary))
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(selectedTab == index ? accentColor.opacity(0.15) : .clear)
+                    .fill(selectedTab == index ? theme.accent(opacity: 0.15) : .clear)
             )
         }
         .buttonStyle(.plain)

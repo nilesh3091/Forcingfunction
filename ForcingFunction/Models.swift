@@ -28,6 +28,182 @@ enum ThemeColor: String, CaseIterable {
     var colorValue: String {
         return self.rawValue.lowercased()
     }
+    
+    /// Returns the AppTheme instance for this theme color
+    var theme: AppTheme {
+        AppTheme(accentColor: self)
+    }
+}
+
+// MARK: - App Theme System
+
+/// Centralized theme system for app-wide styling
+/// All colors used throughout the app should come from this struct
+struct AppTheme {
+    // MARK: - Accent Colors
+    let accentColor: Color
+    let accentColorLight: Color
+    let accentColorDark: Color
+    
+    // MARK: - Background Colors
+    let backgroundPrimary: Color
+    let backgroundSecondary: Color
+    let backgroundTertiary: Color
+    let backgroundCard: Color
+    let backgroundOverlay: Color
+    
+    // MARK: - Text Colors
+    let textPrimary: Color
+    let textSecondary: Color
+    let textTertiary: Color
+    let textDisabled: Color
+    
+    // MARK: - Border & Divider Colors
+    let borderPrimary: Color
+    let borderSecondary: Color
+    let divider: Color
+    
+    // MARK: - Button Colors
+    let buttonPrimary: Color
+    let buttonPrimaryText: Color
+    let buttonSecondary: Color
+    let buttonSecondaryText: Color
+    let buttonDisabled: Color
+    let buttonDisabledText: Color
+    
+    // MARK: - Status Colors
+    let success: Color
+    let warning: Color
+    let error: Color
+    let info: Color
+    
+    // MARK: - Interactive Colors
+    let interactive: Color
+    let interactivePressed: Color
+    
+    // MARK: - Shadow Colors
+    let shadowLight: Color
+    let shadowMedium: Color
+    let shadowHeavy: Color
+    
+    /// Initialize theme with accent color
+    init(accentColor: ThemeColor) {
+        // Set accent colors based on theme
+        switch accentColor {
+        case .red:
+            self.accentColor = .red
+            self.accentColorLight = Color(red: 1.0, green: 0.4, blue: 0.4)
+            self.accentColorDark = Color(red: 0.7, green: 0.0, blue: 0.0)
+        case .blue:
+            self.accentColor = .blue
+            self.accentColorLight = Color(red: 0.4, green: 0.6, blue: 1.0)
+            self.accentColorDark = Color(red: 0.0, green: 0.2, blue: 0.7)
+        case .green:
+            self.accentColor = .green
+            self.accentColorLight = Color(red: 0.4, green: 0.9, blue: 0.4)
+            self.accentColorDark = Color(red: 0.0, green: 0.6, blue: 0.0)
+        }
+        
+        // Dark theme background colors (app uses dark theme)
+        self.backgroundPrimary = .black
+        self.backgroundSecondary = Color(white: 0.1)
+        self.backgroundTertiary = Color(white: 0.15)
+        self.backgroundCard = Color(white: 0.12)
+        self.backgroundOverlay = Color.black.opacity(0.8)
+        
+        // Text colors for dark theme
+        self.textPrimary = .white
+        self.textSecondary = Color.white.opacity(0.7)
+        self.textTertiary = Color.white.opacity(0.5)
+        self.textDisabled = Color.white.opacity(0.4)
+        
+        // Border colors
+        self.borderPrimary = Color.white.opacity(0.2)
+        self.borderSecondary = Color.white.opacity(0.1)
+        self.divider = Color.white.opacity(0.15)
+        
+        // Button colors
+        self.buttonPrimary = self.accentColor
+        self.buttonPrimaryText = .white
+        self.buttonSecondary = Color(white: 0.2)
+        self.buttonSecondaryText = .white
+        self.buttonDisabled = Color(white: 0.15)
+        self.buttonDisabledText = Color.white.opacity(0.4)
+        
+        // Status colors (consistent across themes)
+        self.success = .green
+        self.warning = .orange
+        self.error = .red
+        self.info = .blue
+        
+        // Interactive colors
+        self.interactive = self.accentColor
+        self.interactivePressed = self.accentColorDark
+        
+        // Shadow colors
+        self.shadowLight = Color.black.opacity(0.2)
+        self.shadowMedium = Color.black.opacity(0.3)
+        self.shadowHeavy = Color.black.opacity(0.5)
+    }
+    
+    /// Get a color with opacity applied
+    func color(_ color: Color, opacity: Double) -> Color {
+        color.opacity(opacity)
+    }
+    
+    /// Get accent color with opacity
+    func accent(opacity: Double = 1.0) -> Color {
+        accentColor.opacity(opacity)
+    }
+    
+    /// Get text color with opacity
+    func text(_ level: TextLevel = .primary, opacity: Double = 1.0) -> Color {
+        let baseColor: Color
+        switch level {
+        case .primary:
+            baseColor = textPrimary
+        case .secondary:
+            baseColor = textSecondary
+        case .tertiary:
+            baseColor = textTertiary
+        case .disabled:
+            baseColor = textDisabled
+        }
+        return baseColor.opacity(opacity)
+    }
+    
+    /// Get background color
+    func background(_ level: BackgroundLevel = .primary) -> Color {
+        switch level {
+        case .primary:
+            return backgroundPrimary
+        case .secondary:
+            return backgroundSecondary
+        case .tertiary:
+            return backgroundTertiary
+        case .card:
+            return backgroundCard
+        case .overlay:
+            return backgroundOverlay
+        }
+    }
+}
+
+/// Text color levels
+enum TextLevel {
+    case primary
+    case secondary
+    case tertiary
+    case disabled
+}
+
+/// Background color levels
+enum BackgroundLevel {
+    case primary
+    case secondary
+    case tertiary
+    case card
+    case overlay
 }
 
 /// Timer state

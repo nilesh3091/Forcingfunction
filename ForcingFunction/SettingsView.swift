@@ -13,18 +13,22 @@ struct SettingsView: View {
     // Helper array for pomodoro minutes
     private let pomodoroMinutesOptions: [Double] = [0, 15, 30, 45, 60]
     
+    private var theme: AppTheme {
+        viewModel.theme
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black
+                theme.background(.primary)
                     .ignoresSafeArea()
                 
                 Form {
-                    Section(header: Text("Session Durations").foregroundColor(.white.opacity(0.7))) {
+                    Section(header: Text("Session Durations").foregroundColor(theme.text(.secondary))) {
                         // Pomodoro length
                         HStack {
                             Text("Pomodoro Length")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Picker("", selection: $viewModel.pomodoroMinutes) {
                                 ForEach(pomodoroMinutesOptions, id: \.self) { minutes in
@@ -32,7 +36,7 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(viewModel.accentColor)
+                            .foregroundColor(theme.accentColor)
                             .onChange(of: viewModel.pomodoroMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
@@ -41,7 +45,7 @@ struct SettingsView: View {
                         // Short break length
                         HStack {
                             Text("Short Break")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Picker("", selection: $viewModel.shortBreakMinutes) {
                                 ForEach(1...30, id: \.self) { minutes in
@@ -49,7 +53,7 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(viewModel.accentColor)
+                            .foregroundColor(theme.accentColor)
                             .onChange(of: viewModel.shortBreakMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
@@ -58,7 +62,7 @@ struct SettingsView: View {
                         // Long break length
                         HStack {
                             Text("Long Break")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Picker("", selection: $viewModel.longBreakMinutes) {
                                 ForEach(5...60, id: \.self) { minutes in
@@ -66,19 +70,19 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(viewModel.accentColor)
+                            .foregroundColor(theme.accentColor)
                             .onChange(of: viewModel.longBreakMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
                         }
                     }
-                    .listRowBackground(Color.gray.opacity(0.1))
+                    .listRowBackground(theme.background(.card))
                     
-                    Section(header: Text("Pomodoro Cycle").foregroundColor(.white.opacity(0.7))) {
+                    Section(header: Text("Pomodoro Cycle").foregroundColor(theme.text(.secondary))) {
                         // Pomodoros before long break
                         HStack {
                             Text("Pomodoros Before Long Break")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Picker("", selection: $viewModel.pomodorosBeforeLongBreak) {
                                 ForEach(1...10, id: \.self) { count in
@@ -86,16 +90,16 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(viewModel.accentColor)
+                            .foregroundColor(theme.accentColor)
                         }
                     }
-                    .listRowBackground(Color.gray.opacity(0.1))
+                    .listRowBackground(theme.background(.card))
                     
-                    Section(header: Text("Dial Settings").foregroundColor(.white.opacity(0.7))) {
+                    Section(header: Text("Dial Settings").foregroundColor(theme.text(.secondary))) {
                         // Snap increment
                         HStack {
                             Text("Snap Increment")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Picker("", selection: $viewModel.snapIncrement) {
                                 Text("1 minute").tag(1.0)
@@ -103,39 +107,39 @@ struct SettingsView: View {
                                 Text("15 minutes").tag(15.0)
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(viewModel.accentColor)
+                            .foregroundColor(theme.accentColor)
                         }
                     }
-                    .listRowBackground(Color.gray.opacity(0.1))
+                    .listRowBackground(theme.background(.card))
                     
-                    Section(header: Text("Behavior").foregroundColor(.white.opacity(0.7))) {
+                    Section(header: Text("Behavior").foregroundColor(theme.text(.secondary))) {
                         // Auto-start next session
                         Toggle(isOn: $viewModel.autoStartNext) {
                             Text("Auto-start Next Session")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                         }
-                        .tint(viewModel.accentColor)
+                        .tint(theme.accentColor)
                         
                         // Play sound on completion
                         Toggle(isOn: $viewModel.playSoundOnCompletion) {
                             Text("Play Sound on Completion")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                         }
-                        .tint(viewModel.accentColor)
+                        .tint(theme.accentColor)
                         
                         // Haptics
                         Toggle(isOn: $viewModel.hapticsEnabled) {
                             Text("Haptic Feedback")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                         }
-                        .tint(viewModel.accentColor)
+                        .tint(theme.accentColor)
                         
                         // Live Activities
                         Toggle(isOn: $viewModel.liveActivitiesEnabled) {
                             Text("Live Activities")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                         }
-                        .tint(viewModel.accentColor)
+                        .tint(theme.accentColor)
                         .onChange(of: viewModel.liveActivitiesEnabled) { oldValue, newValue in
                             if !newValue {
                                 // End any active Live Activity when disabled
@@ -143,33 +147,33 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    .listRowBackground(Color.gray.opacity(0.1))
+                    .listRowBackground(theme.background(.card))
                     
-                    Section(header: Text("Categories").foregroundColor(.white.opacity(0.7))) {
+                    Section(header: Text("Categories").foregroundColor(theme.text(.secondary))) {
                         NavigationLink(destination: CategoryManagementView(accentColor: viewModel.accentColor)) {
                             HStack {
                                 Text("Manage Categories")
-                                    .foregroundColor(.white)
+                                    .foregroundColor(theme.text(.primary))
                                 Spacer()
                                 Text("\(CategoryManager.shared.getActiveCount())/\(CategoryManager.shared.getMaxActiveCategories())")
-                                    .foregroundColor(.white.opacity(0.6))
+                                    .foregroundColor(theme.text(.tertiary))
                                     .font(.subheadline)
                             }
                         }
                     }
-                    .listRowBackground(Color.gray.opacity(0.1))
+                    .listRowBackground(theme.background(.card))
                     
-                    Section(header: Text("Appearance").foregroundColor(.white.opacity(0.7))) {
+                    Section(header: Text("Appearance").foregroundColor(theme.text(.secondary))) {
                         // Theme color
                         HStack {
                             Text("Theme Color")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Picker("", selection: $viewModel.themeColorString) {
                                 ForEach(ThemeColor.allCases, id: \.self) { color in
                                     HStack {
                                         Circle()
-                                            .fill(color == .red ? Color.red : (color == .blue ? Color.blue : Color.green))
+                                            .fill(color.theme.accentColor)
                                             .frame(width: 16, height: 16)
                                         Text(color.rawValue)
                                     }
@@ -177,26 +181,26 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(viewModel.accentColor)
+                            .foregroundColor(theme.accentColor)
                         }
                     }
-                    .listRowBackground(Color.gray.opacity(0.1))
+                    .listRowBackground(theme.background(.card))
                     
-                    Section(header: Text("Statistics").foregroundColor(.white.opacity(0.7))) {
+                    Section(header: Text("Statistics").foregroundColor(theme.text(.secondary))) {
                         HStack {
                             Text("Total Focus Time")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Text(AngleUtilities.formatFocusTime(viewModel.totalFocusMinutes))
-                                .foregroundColor(viewModel.accentColor)
+                                .foregroundColor(theme.accentColor)
                         }
                         
                         HStack {
                             Text("Completed Pomodoros")
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.text(.primary))
                             Spacer()
                             Text("\(viewModel.completedPomodoros)")
-                                .foregroundColor(viewModel.accentColor)
+                                .foregroundColor(theme.accentColor)
                         }
                         
                         Button(action: {
@@ -204,10 +208,10 @@ struct SettingsView: View {
                             viewModel.completedPomodoros = 0
                         }) {
                             Text("Reset Statistics")
-                                .foregroundColor(.red)
+                                .foregroundColor(theme.error)
                         }
                     }
-                    .listRowBackground(Color.gray.opacity(0.1))
+                    .listRowBackground(theme.background(.card))
                 }
                 .scrollContentBackground(.hidden)
                 .preferredColorScheme(.dark)
