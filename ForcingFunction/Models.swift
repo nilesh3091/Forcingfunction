@@ -387,6 +387,7 @@ struct PomodoroTask: Codable, Identifiable {
     let createdDate: Date
     var completedDate: Date?
     var isArchived: Bool  // Same as isCompleted, but explicit for clarity
+    var categoryId: UUID?  // Optional category assignment
     
     init(
         id: UUID = UUID(),
@@ -396,7 +397,8 @@ struct PomodoroTask: Codable, Identifiable {
         totalPomodoroMinutes: Double = 0.0,
         createdDate: Date = Date(),
         completedDate: Date? = nil,
-        isArchived: Bool = false
+        isArchived: Bool = false,
+        categoryId: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -406,6 +408,7 @@ struct PomodoroTask: Codable, Identifiable {
         self.createdDate = createdDate
         self.completedDate = completedDate
         self.isArchived = isArchived
+        self.categoryId = categoryId
     }
     
     /// Format accumulated time as "Xh Ym" or "Ym"
