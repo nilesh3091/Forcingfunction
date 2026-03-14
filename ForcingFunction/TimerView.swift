@@ -589,17 +589,9 @@ struct TimerView: View {
                         .monospacedDigit()
                         .accessibilityLabel("Remaining time: \(timeText)")
                     
-                    // Show task indicator or session interval
-                    if let taskId = viewModel.selectedTaskId,
-                       let _ = TaskDataStore.shared.getTask(byId: taskId) {
-                        Text("Task active")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(theme.accentColor)
-                    } else {
-                        Text("session interval")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(theme.text(.tertiary))
-                    }
+                    Text("session interval")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(theme.text(.tertiary))
                 }
                 .padding(.top, 30)
                 

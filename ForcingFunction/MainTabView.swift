@@ -32,13 +32,9 @@ struct MainTabView: View {
                 StatsView(viewModel: viewModel)
                     .tag(2)
                 
-                // Tasks Tab
-                MoreView(viewModel: viewModel, selectedTab: $selectedTab)
-                    .tag(3)
-                
                 // Settings Tab
                 ProfileView(viewModel: viewModel)
-                    .tag(4)
+                    .tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             
@@ -67,19 +63,11 @@ struct MainTabView: View {
                     selectedTab: $selectedTab,
                     theme: theme
                 )
-                
-                TabBarButton(
-                    title: "Tasks",
-                    systemImage: "checklist",
-                    index: 3,
-                    selectedTab: $selectedTab,
-                    theme: theme
-                )
-                
+
                 TabBarButton(
                     title: "Settings",
                     systemImage: "gearshape.fill",
-                    index: 4,
+                    index: 3,
                     selectedTab: $selectedTab,
                     theme: theme
                 )
