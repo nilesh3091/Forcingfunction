@@ -389,34 +389,31 @@ struct TimerView: View {
                             .animation(.linear(duration: 1.0), value: viewModel.progress)
                     }
 
-                    // Percent label that rides the arc endcap (outside the ring)
+                    // Progress head: circular endcap with percent
                     if viewModel.timerState == .running || viewModel.timerState == .paused {
                         let angle = (viewModel.progress * 360.0) - 90.0
-                        let r = (dialSize / 2) + 18
+                        let r = (dialSize / 2)
                         let x = (dialSize / 2) + (CGFloat(cos(angle * .pi / 180.0)) * r)
                         let y = (dialSize / 2) + (CGFloat(sin(angle * .pi / 180.0)) * r)
                         let pctA11y = Int((viewModel.progress * 100).rounded())
+                        let headSize: CGFloat = 28
 
-                        Color.clear
-                            .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundColor(theme.text(.primary))
-                            .monospacedDigit()
-                            .frame(width: 34, alignment: .center)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 8)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(theme.background(.secondary).opacity(0.96))
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(theme.borderPrimary, lineWidth: 1)
-                            )
-                            .position(x: x, y: y)
-                            .animation(.linear(duration: 1.0), value: viewModel.progress)
-                            .allowsHitTesting(false)
-                            .accessibilityLabel("Progress \(pctA11y) percent")
+                        ZStack {
+                            Circle()
+                                .fill(theme.accentColor)
+                                .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 5)
+
+                            Color.clear
+                                .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundColor(Color.white.opacity(0.95))
+                                .monospacedDigit()
+                        }
+                        .frame(width: headSize, height: headSize)
+                        .position(x: x, y: y)
+                        .animation(.linear(duration: 1.0), value: viewModel.progress)
+                        .allowsHitTesting(false)
+                        .accessibilityLabel("Progress \(pctA11y) percent")
                     }
 
                     // Hand/needle
