@@ -149,20 +149,6 @@ struct SettingsView: View {
                     }
                     .listRowBackground(theme.background(.card))
                     
-                    Section(header: Text("Categories").foregroundColor(theme.text(.secondary))) {
-                        NavigationLink(destination: CategoryManagementView(accentColor: viewModel.accentColor)) {
-                            HStack {
-                                Text("Manage Categories")
-                                    .foregroundColor(theme.text(.primary))
-                                Spacer()
-                                Text("\(CategoryManager.shared.getActiveCount())/\(CategoryManager.shared.getMaxActiveCategories())")
-                                    .foregroundColor(theme.text(.tertiary))
-                                    .font(.subheadline)
-                            }
-                        }
-                    }
-                    .listRowBackground(theme.background(.card))
-                    
                     Section(header: Text("Appearance").foregroundColor(theme.text(.secondary))) {
                         // Theme color
                         HStack {

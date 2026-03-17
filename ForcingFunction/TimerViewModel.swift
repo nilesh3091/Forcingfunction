@@ -19,16 +19,6 @@ class TimerViewModel: ObservableObject {
     @Published var currentSessionType: SessionType = .work
     @Published var completedPomodoros: Int = 0
     @Published var totalFocusMinutes: Int = 0
-    @AppStorage("selectedCategoryId") var selectedCategoryIdString: String = ""
-    
-    var selectedCategoryId: UUID? {
-        get {
-            UUID(uuidString: selectedCategoryIdString)
-        }
-        set {
-            selectedCategoryIdString = newValue?.uuidString ?? ""
-        }
-    }
     
     // MARK: - Settings (using @AppStorage)
     @AppStorage("pomodoroMinutes") var pomodoroMinutes: Double = AppSettings.defaultPomodoroMinutes
@@ -247,7 +237,7 @@ class TimerViewModel: ObservableObject {
             pauseStartTime = nil
             
             // Create new session
-            let sessionCategoryId: UUID? = selectedCategoryId
+            let sessionCategoryId: UUID? = nil
             let newSession = PomodoroSession(
                 sessionType: currentSessionType,
                 startTime: now,
@@ -736,7 +726,7 @@ class TimerViewModel: ObservableObject {
             // If we still can't find it, create a new one based on saved state
             // This handles edge cases where the session was never saved
             if let sessionType = SessionType(rawValue: savedSessionTypeRaw) {
-                let sessionCategoryId: UUID? = selectedCategoryId
+                let sessionCategoryId: UUID? = nil
                 
                 let newSession = PomodoroSession(
                     sessionType: sessionType,
