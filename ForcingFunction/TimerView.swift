@@ -9,35 +9,6 @@ import SwiftUI
 import UIKit
 import Combine
 
-// Extension to create darker/lighter shades of a color while maintaining full opacity
-extension Color {
-    func darker(by percentage: CGFloat) -> Color {
-        let uiColor = UIColor(self)
-        var hue: CGFloat = 0
-        var saturation: CGFloat = 0
-        var brightness: CGFloat = 0
-        var alpha: CGFloat = 0
-        
-        uiColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
-        brightness = max(0, brightness - percentage)  // Darken by reducing brightness
-        
-        return Color(hue: Double(hue), saturation: Double(saturation), brightness: Double(brightness), opacity: 1.0)
-    }
-    
-    func lighter(by percentage: CGFloat) -> Color {
-        let uiColor = UIColor(self)
-        var hue: CGFloat = 0
-        var saturation: CGFloat = 0
-        var brightness: CGFloat = 0
-        var alpha: CGFloat = 0
-        
-        uiColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
-        brightness = min(1.0, brightness + percentage)  // Lighten by increasing brightness
-        
-        return Color(hue: Double(hue), saturation: Double(saturation), brightness: Double(brightness), opacity: 1.0)
-    }
-}
-
 struct TimerView: View {
     @ObservedObject var viewModel: TimerViewModel
     @State private var isDragging = false
@@ -263,10 +234,7 @@ struct TimerView: View {
         return groups
     }
     
-    // Dial geometry
-    private let dialSize: CGFloat = 300
-    private let knobSize: CGFloat = 20
-    private let handLength: CGFloat = 120
+    private let knobSize: CGFloat = 26
     
     // Haptic feedback constants
     private let hapticThrottleInterval: TimeInterval = 0.05  // Max 20 Hz for continuous feedback
@@ -275,96 +243,96 @@ struct TimerView: View {
     private var theme: AppTheme {
         viewModel.theme
     }
+
+    private struct PressableButtonStyle: ButtonStyle {
+        let scale: CGFloat
+        let opacity: Double
+
+        init(scale: CGFloat = 0.98, opacity: Double = 0.92) {
+            self.scale = scale
+            self.opacity = opacity
+        }
+
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? scale : 1.0)
+                .opacity(configuration.isPressed ? opacity : 1.0)
+                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        }
+    }
+    
+    private struct AnimatedPercentText: AnimatableModifier {
+        var percent: Double
+        
+        var animatableData: Double {
+            get { percent }
+            set { percent = newValue }
+        }
+        
+        func body(content: Content) -> some View {
+            Text("\(Int(percent.rounded()))%")
+        }
+    }
     
     var body: some View {
-        ZStack {
-            // Dark background
-            theme.background(.primary)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // Top status bar area
-                HStack {
-                    // Focus time display
-                    Text(AngleUtilities.formatFocusTime(viewModel.totalFocusMinutes))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(theme.text(.secondary))
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
+        GeometryReader { outerGeometry in
+            let safeWidth = outerGeometry.size.width
+            let safeHeight = outerGeometry.size.height
+            let dialSize = max(240, min(safeWidth - 40, safeHeight * 0.46, 340))
+            let handLength = dialSize * 0.40
+
+            ZStack {
+                // Dark background
+                theme.background(.primary)
+                    .ignoresSafeArea()
                 
-                Spacer()
-                
-                // Main heading
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your day :")
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundColor(theme.text(.primary))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 20)
-                    
-                    // Day progress bar
-                    VStack(spacing: 6) {
-                        HStack {
-                            Text("\(Int(dayProgress * 100))%")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(theme.text(.secondary))
-                            
-                            Spacer()
-                            
-                            Text(formatTodayFocusTime())
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(theme.text(.secondary))
-                        }
+                VStack(spacing: 0) {
+                    // Main heading
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Today")
+                            .font(.system(size: 19, weight: .bold))
+                            .foregroundColor(theme.text(.primary))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 20)
                         
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                // Background bar
-                                RoundedRectangle(cornerRadius: 5)
-                                    .fill(theme.borderPrimary)
-                                    .frame(height: 10)
+                        // Day progress bar
+                        VStack(spacing: 6) {
+                            HStack {
+                                Text("Focused \(formatTodayFocusTime())")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(theme.text(.secondary))
                                 
-                                // Progress bar
-                                RoundedRectangle(cornerRadius: 5)
-                                    .fill(theme.accentColor)
-                                    .frame(width: geometry.size.width * dayProgress, height: 10)
-                                    .animation(.linear(duration: 60.0), value: dayProgress)
+                                Spacer()
                                 
-                                // Green blocks for completed work sessions
-                                SessionBlocksOverlay(
-                                    geometry: geometry,
-                                    dayProgress: dayProgress,
-                                    theme: theme
-                                )
+                                Text("\(Int(dayProgress * 100))%")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(theme.text(.tertiary))
                             }
-                        }
-                        .frame(height: 10)
-                        
-                        // Time markers labels below the bar
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                ForEach(generateTimeMarkers(), id: \.hour) { marker in
-                                    Text(marker.label)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(theme.text(.tertiary))
-                                        .fixedSize()
-                                        .frame(width: 30, alignment: .center)
-                                        .offset(x: geometry.size.width * marker.position - 15)
+                            
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    // Background bar
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(theme.background(.tertiary))
+                                        .frame(height: 6)
+                                    
+                                    // Progress bar
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(theme.accent(opacity: 0.9))
+                                        .frame(width: geometry.size.width * dayProgress, height: 6)
+                                        .animation(.linear(duration: 60.0), value: dayProgress)
                                 }
                             }
+                            .frame(height: 6)
                         }
-                        .frame(height: 16)
+                        .padding(.horizontal, 20)
                     }
-                    .padding(.horizontal, 20)
-                }
-                .padding(.top, 20)
-                
-                Spacer()
-                
-                // Interactive circular dial
-                ZStack {
+                    .padding(.top, 20)
+                    
+                    Spacer()
+                    
+                    // Interactive circular dial
+                    ZStack {
                     // Outer ring with tick marks
                     Circle()
                         .stroke(theme.borderPrimary, lineWidth: 2)
@@ -393,15 +361,16 @@ struct TimerView: View {
                         )
                     }
                     
-                    // Tick marks
-                    ForEach(0..<60) { index in
-                        let angle = Double(index) * 6.0 - 90.0 // 6 degrees per minute mark
-                        let isMajorTick = index % 5 == 0
-                        let tickLength: CGFloat = isMajorTick ? 12 : 6
-                        let tickWidth: CGFloat = isMajorTick ? 2 : 1
-                        
-                        Rectangle()
-                            .fill(theme.text(.tertiary))
+                    // Tick marks (minor every 1 minute, major every 5 minutes)
+                    ForEach(0..<60) { minute in
+                        let angle = (Double(minute) * 6.0) - 90.0
+                        let isMajor = minute % 5 == 0
+                        let tickLength: CGFloat = isMajor ? 12 : 6
+                        let tickWidth: CGFloat = isMajor ? 2 : 1
+                        let tickColor = theme.text(.tertiary, opacity: isMajor ? 0.75 : 0.35)
+
+                        RoundedRectangle(cornerRadius: tickWidth)
+                            .fill(tickColor)
                             .frame(width: tickWidth, height: tickLength)
                             .offset(y: -dialSize / 2 + tickLength / 2)
                             .rotationEffect(.degrees(angle))
@@ -419,7 +388,37 @@ struct TimerView: View {
                             .rotationEffect(.degrees(-90))
                             .animation(.linear(duration: 1.0), value: viewModel.progress)
                     }
-                    
+
+                    // Percent label that rides the arc endcap (outside the ring)
+                    if viewModel.timerState == .running || viewModel.timerState == .paused {
+                        let angle = (viewModel.progress * 360.0) - 90.0
+                        let r = (dialSize / 2) + 18
+                        let x = (dialSize / 2) + (CGFloat(cos(angle * .pi / 180.0)) * r)
+                        let y = (dialSize / 2) + (CGFloat(sin(angle * .pi / 180.0)) * r)
+                        let pctA11y = Int((viewModel.progress * 100).rounded())
+
+                        Color.clear
+                            .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(theme.text(.primary))
+                            .monospacedDigit()
+                            .frame(width: 34, alignment: .center)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 8)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(theme.background(.secondary).opacity(0.96))
+                            )
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(theme.borderPrimary, lineWidth: 1)
+                            )
+                            .position(x: x, y: y)
+                            .animation(.linear(duration: 1.0), value: viewModel.progress)
+                            .allowsHitTesting(false)
+                            .accessibilityLabel("Progress \(pctA11y) percent")
+                    }
+
                     // Hand/needle
                     // For display, use modulo 360° so the hand rotates visually
                     let displayAngle = isDragging ? dragAngle : {
@@ -437,28 +436,37 @@ struct TimerView: View {
                         }
                     }()
                     
-                    // Hand line
-                    Rectangle()
-                        .fill(theme.text(.primary))
-                        .frame(width: 5, height: handLength)
-                        .offset(y: -handLength / 2)
-                        .rotationEffect(.degrees(handAngle))
-                        .animation(isDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: handAngle)
+                    // Hand/needle (slim, calm)
+                    ZStack {
+                        Capsule(style: .continuous)
+                            .fill(theme.text(.primary, opacity: 0.92))
+                            .frame(width: 3, height: handLength)
+
+                        Circle()
+                            .fill(theme.accent(opacity: 0.85))
+                            .frame(width: 6, height: 6)
+                            .offset(y: -handLength / 2 + 6)
+                    }
+                    .offset(y: -handLength / 2)
+                    .rotationEffect(.degrees(handAngle))
+                    .animation(isDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: handAngle)
                     
                     // Center knob
                     Circle()
                         .fill(theme.text(.primary))
                         .frame(width: knobSize, height: knobSize)
-                        .shadow(color: isDragging ? theme.accent(opacity: 0.8) : Color.clear, radius: 15)
+                        .shadow(color: isDragging ? theme.accent(opacity: 0.35) : Color.clear, radius: 10, x: 0, y: 6)
                         .overlay(
-                            Circle()
-                                .stroke(theme.accentColor, lineWidth: 2)
-                                .frame(width: knobSize, height: knobSize)
+                            ZStack {
+                                Circle()
+                                    .stroke(theme.accentColor, lineWidth: 2)
+                                    .frame(width: knobSize, height: knobSize)
+                            }
                         )
                         .scaleEffect(isDragging ? 1.1 : 1.0)
                         .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isDragging)
-                }
-                .frame(width: dialSize, height: dialSize)
+                    }
+                    .frame(width: dialSize, height: dialSize)
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
@@ -571,8 +579,8 @@ struct TimerView: View {
                 .accessibilityLabel("Timer dial")
                 .accessibilityValue(String(format: "%.2f minutes", viewModel.selectedMinutes))
                 
-                // Time display
-                VStack(spacing: 4) {
+                    // Time display
+                    VStack(spacing: 4) {
                     // Show seconds during countdown (running/paused), minutes only when idle
                     let displaySeconds = isDragging ? dragRemainingSeconds : viewModel.remainingSeconds
                     let timeText = (viewModel.timerState == .running || viewModel.timerState == .paused)
@@ -584,17 +592,13 @@ struct TimerView: View {
                         .foregroundColor(theme.text(.primary))
                         .monospacedDigit()
                         .accessibilityLabel("Remaining time: \(timeText)")
+                    }
+                    .padding(.top, 18)
                     
-                    Text("session interval")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(theme.text(.tertiary))
-                }
-                .padding(.top, 30)
-                
-                Spacer()
-                
-                // Control buttons
-                HStack(spacing: 20) {
+                    Spacer()
+                    
+                    // Control buttons
+                    HStack(spacing: 20) {
                     if viewModel.timerState == .running || viewModel.timerState == .paused {
                         // Reset button
                         Button(action: {
@@ -609,6 +613,7 @@ struct TimerView: View {
                                 .cornerRadius(12)
                         }
                         .accessibilityLabel("Reset timer")
+                            .buttonStyle(PressableButtonStyle())
                         
                         // Pause/Resume button
                         Button(action: {
@@ -625,28 +630,31 @@ struct TimerView: View {
                                 .padding(.vertical, 16)
                                 .background(theme.buttonPrimary)
                                 .cornerRadius(12)
-                                .shadow(color: theme.accent(opacity: 0.5), radius: 10)
+                                    .shadow(color: Color.black.opacity(0.22), radius: 10, x: 0, y: 6)
                         }
                         .accessibilityLabel(viewModel.timerState == .running ? "Pause timer" : "Resume timer")
+                            .buttonStyle(PressableButtonStyle())
                     } else {
                         // Start button (full width when idle)
                         Button(action: {
                             viewModel.startTimer()
                         }) {
-                            Text("START SESSION")
-                                .font(.system(size: 18, weight: .bold))
+                                Text("Start")
+                                    .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(theme.buttonPrimaryText)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 18)
                                 .background(theme.buttonPrimary)
                                 .cornerRadius(16)
-                                .shadow(color: theme.accent(opacity: 0.6), radius: 15)
+                                    .shadow(color: Color.black.opacity(0.24), radius: 12, x: 0, y: 7)
                         }
                         .accessibilityLabel("Start session")
+                            .buttonStyle(PressableButtonStyle(scale: 0.985, opacity: 0.94))
                     }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 40)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 40)
             }
         }
         .preferredColorScheme(.dark)
@@ -672,180 +680,61 @@ struct SweptAreaView: View {
         GeometryReader { geometry in
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             let radius = min(geometry.size.width, geometry.size.height) / 2
-            
-            // Create pronounced 3D gradient: lighter center, darker edges (solid colors, fully opaque)
-            // Increased contrast: 25% lighter center, 45% darker edges
-            let lighterColor = color.lighter(by: 0.25)  // 25% lighter at center
-            let baseColor = color  // Base color in middle
-            let darkerColor = color.darker(by: 0.45)  // 45% darker at edges
-            
-            // Radial gradient for raised effect
-            let radialGradient = RadialGradient(
-                gradient: Gradient(colors: [lighterColor, baseColor, darkerColor]),
+
+            // Minimal, calm fill: low-contrast gradient with subtle edge definition.
+            let fillGradient = RadialGradient(
+                gradient: Gradient(colors: [
+                    color.opacity(0.26),
+                    color.opacity(0.18)
+                ]),
                 center: .center,
                 startRadius: 0,
                 endRadius: radius
             )
-            
-            // Calculate all angles and positions BEFORE the conditional (outside ViewBuilder)
-            // Use let instead of var to avoid ViewBuilder issues - no mutations allowed in ViewBuilder
+
+            // Calculate angles and positions outside ViewBuilder branches.
             let startAngleRadians = (270.0 * .pi / 180.0)  // Top in SwiftUI
             let endAngleDegrees = (270.0 + totalAngle).truncatingRemainder(dividingBy: 360.0)
             let endAngleRadians = endAngleDegrees * .pi / 180.0
-            
-            // Calculate highlight position
-            let mathAngle = endAngleRadians - (.pi / 2.0)  // Convert to math coordinates
-            let highlightCenterX = 0.5 + 0.5 * CGFloat(cos(mathAngle))
-            let highlightCenterY = 0.5 + 0.5 * CGFloat(sin(mathAngle))
-            let highlightStartAngle = endAngleRadians - (5.0 * .pi / 180.0)  // 5 degrees before end
-            
-            // Draw pie slice from top (0°) to current angle
-            // Handle full circle (360°) and partial arcs
+
             if totalAngle > 0.1 {
                 if totalAngle >= 360.0 {
-                    // Full circle - draw complete circle with pronounced 3D gradient and raised effect
-                    ZStack {
-                        // Base shadow layer (creates depth)
-                        Circle()
-                            .fill(Color.black.opacity(0.4))
-                            .frame(width: dialSize, height: dialSize)
-                            .offset(x: 0, y: 4)
-                            .blur(radius: 8)
-                        
-                        // Main circle with gradient
-                        Circle()
-                            .fill(radialGradient)
-                            .frame(width: dialSize, height: dialSize)
-                        
-                        // Top edge highlight (light from above)
-                        Circle()
-                            .stroke(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        lighterColor.opacity(0.8),
-                                        Color.clear
-                                    ]),
-                                    startPoint: .top,
-                                    endPoint: .center
-                                ),
-                                lineWidth: 3
-                            )
-                            .frame(width: dialSize, height: dialSize)
-                    }
-                    .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)  // Strong shadow for raised effect
+                    Circle()
+                        .fill(fillGradient)
+                        .frame(width: dialSize, height: dialSize)
+                        .overlay(
+                            Circle()
+                                .stroke(color.opacity(0.22), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 6)
                 } else {
-                    // Partial arc - draw pie slice with raised/beveled effect
-                    ZStack {
-                        // Base shadow layer (creates depth - offset downward)
-                        Path { path in
-                            path.move(to: center)
-                            path.addArc(
-                                center: center,
-                                radius: radius,
-                                startAngle: Angle(radians: Double(startAngleRadians)),
-                                endAngle: Angle(radians: Double(endAngleRadians)),
-                                clockwise: false
-                            )
-                            path.closeSubpath()
-                        }
-                        .fill(Color.black.opacity(0.3))
-                        .offset(x: 0, y: 4)  // Offset downward for shadow
-                        .blur(radius: 6)
-                        
-                        // Main pie slice with radial gradient
-                        Path { path in
-                            path.move(to: center)
-                            path.addArc(
-                                center: center,
-                                radius: radius,
-                                startAngle: Angle(radians: Double(startAngleRadians)),
-                                endAngle: Angle(radians: Double(endAngleRadians)),
-                                clockwise: false  // Counter-clockwise in SwiftUI = clockwise in our system
-                            )
-                            path.closeSubpath()
-                        }
-                        .fill(radialGradient)
-                        
-                        // Top/outer edge highlight (beveled edge - light from above)
-                        Path { path in
-                            path.move(to: center)
-                            path.addArc(
-                                center: center,
-                                radius: radius,
-                                startAngle: Angle(radians: Double(startAngleRadians)),
-                                endAngle: Angle(radians: Double(endAngleRadians)),
-                                clockwise: false
-                            )
-                            path.closeSubpath()
-                        }
-                        .stroke(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    lighterColor.opacity(0.9),
-                                    lighterColor.opacity(0.3),
-                                    Color.clear
-                                ]),
-                                startPoint: UnitPoint(
-                                    x: 0.5 + 0.5 * CGFloat(cos(startAngleRadians - (.pi / 2.0))),
-                                    y: 0.5 + 0.5 * CGFloat(sin(startAngleRadians - (.pi / 2.0)))
-                                ),
-                                endPoint: .center
-                            ),
-                            lineWidth: 4
+                    Path { path in
+                        path.move(to: center)
+                        path.addArc(
+                            center: center,
+                            radius: radius,
+                            startAngle: Angle(radians: Double(startAngleRadians)),
+                            endAngle: Angle(radians: Double(endAngleRadians)),
+                            clockwise: false
                         )
-                        
-                        // Bottom/inner edge shadow (beveled edge - shadow for depth)
-                        Path { path in
-                            path.move(to: center)
-                            path.addArc(
-                                center: center,
-                                radius: radius - 2,
-                                startAngle: Angle(radians: Double(startAngleRadians)),
-                                endAngle: Angle(radians: Double(endAngleRadians)),
-                                clockwise: false
-                            )
-                            path.closeSubpath()
-                        }
-                        .stroke(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    darkerColor.opacity(0.6),
-                                    Color.clear
-                                ]),
-                                startPoint: .center,
-                                endPoint: UnitPoint(
-                                    x: 0.5 + 0.5 * CGFloat(cos(endAngleRadians - (.pi / 2.0))),
-                                    y: 0.5 + 0.5 * CGFloat(sin(endAngleRadians - (.pi / 2.0)))
-                                )
-                            ),
-                            lineWidth: 3
-                        )
-                        
-                        // Highlight along the leading edge (where the arm is)
-                        Path { path in
-                            path.move(to: center)
-                            path.addArc(
-                                center: center,
-                                radius: radius,
-                                startAngle: Angle(radians: Double(highlightStartAngle)),
-                                endAngle: Angle(radians: Double(endAngleRadians)),
-                                clockwise: false
-                            )
-                            path.closeSubpath()
-                        }
-                        .fill(
-                            RadialGradient(
-                                gradient: Gradient(colors: [
-                                    lighterColor.opacity(0.9),
-                                    lighterColor.opacity(0.4)
-                                ]),
-                                center: UnitPoint(x: highlightCenterX, y: highlightCenterY),
-                                startRadius: 0,
-                                endRadius: radius
-                            )
-                        )
+                        path.closeSubpath()
                     }
-                    .shadow(color: Color.black.opacity(0.5), radius: 18, x: 0, y: 8)  // Strong shadow for raised effect
+                    .fill(fillGradient)
+                    .overlay(
+                        Path { path in
+                            path.move(to: center)
+                            path.addArc(
+                                center: center,
+                                radius: radius,
+                                startAngle: Angle(radians: Double(startAngleRadians)),
+                                endAngle: Angle(radians: Double(endAngleRadians)),
+                                clockwise: false
+                            )
+                            path.closeSubpath()
+                        }
+                        .stroke(color.opacity(0.22), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.16), radius: 8, x: 0, y: 5)
                 }
             }
         }
