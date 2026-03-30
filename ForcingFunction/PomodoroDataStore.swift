@@ -41,8 +41,7 @@ class PomodoroDataStore {
             
             let beforeCount = sessions.count
             sessions.removeAll { session in
-                guard session.sessionType == .work else { return false }
-                guard session.status == .completed || session.status == .cancelled else { return false }
+                guard session.sessionType == .work, session.status == .cancelled else { return false }
                 let minutes = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
                 return minutes < PomodoroSession.minimumRecordedWorkMinutes
             }
@@ -93,13 +92,17 @@ class PomodoroDataStore {
         }
     }
     
-    /// Persists a session after it has ended. Work sessions under `minimumRecordedWorkMinutes` are removed instead.
+    /// Persists a session after it has ended. Completed work sessions are always kept; cancelled work under `minimumRecordedWorkMinutes` is removed.
     func finalizeEndedSession(_ session: PomodoroSession) {
         guard session.sessionType == .work else {
             updateSession(session)
             return
         }
         guard session.status == .completed || session.status == .cancelled else {
+            updateSession(session)
+            return
+        }
+        if session.status == .completed {
             updateSession(session)
             return
         }

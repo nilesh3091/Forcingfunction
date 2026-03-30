@@ -225,16 +225,12 @@ struct TimerView: View {
     private var theme: AppTheme {
         viewModel.theme
     }
-    
-    private var primaryActionLabelColor: Color {
-        switch viewModel.currentSessionType {
-        case .work:
-            return theme.buttonPrimaryText
-        case .shortBreak, .longBreak:
-            return Color(red: 0.05, green: 0.07, blue: 0.10)
-        }
-    }
 
+    /// Pause: orange outline (`warning`); Resume: green outline (`breakAccent`).
+    private var pauseResumeOutlineColor: Color {
+        viewModel.timerState == .running ? theme.warning : theme.breakAccent
+    }
+    
     private struct PressableButtonStyle: ButtonStyle {
         let scale: CGFloat
         let opacity: Double
@@ -617,13 +613,17 @@ struct TimerView: View {
                             }
                         }) {
                             Text(viewModel.timerState == .running ? "Pause" : "Resume")
-                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                .tracking(0.5)
-                                .foregroundColor(primaryActionLabelColor)
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .tracking(0.4)
+                                .foregroundColor(pauseResumeOutlineColor)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
-                                .background(viewModel.sessionAccentColor)
+                                .background(Color.clear)
                                 .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(pauseResumeOutlineColor.opacity(0.95), lineWidth: 1)
+                                )
                         }
                         .accessibilityLabel(viewModel.timerState == .running ? "Pause timer" : "Resume timer")
                             .buttonStyle(PressableButtonStyle())

@@ -307,7 +307,7 @@ struct PomodoroSession: Codable, Identifiable {
     let wasAutoStarted: Bool
     var categoryId: UUID?
     
-    /// Minimum focused work minutes before a work session is kept (history, stats, widgets).
+    /// Cancelled (incomplete) work sessions under this many focused minutes are discarded (history/stats).
     static let minimumRecordedWorkMinutes: Double = 15
     
     /// Computed actual duration in minutes (nil if session hasn't ended)
