@@ -12,9 +12,13 @@ import WidgetKit
 
 struct WeeklyWidgetData: Codable {
     let currentWeekTotalMinutes: Int
-    let weeklyGoalMinutes: Int
+    /// Completed work focus minutes for the current calendar day (matches main timer “today”).
+    let todayFocusMinutes: Int
+    /// Single daily target in minutes (same as Settings → Focus goal).
+    let dailyFocusGoalMinutes: Int
     let dailyTotals: [Int] // [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
-    let accentColor: String // "Red", "Blue", or "Green"
+    /// Legacy key for Codable compatibility; widget UI uses fixed work accent (cyan).
+    let accentColor: String
     let lastUpdated: Date
 }
 
@@ -129,35 +133,21 @@ class WidgetDataManager {
             #endif
         }
         
-        // Sync settings from standard UserDefaults to shared UserDefaults
-        // (since @AppStorage uses standard UserDefaults by default)
-        if let sharedDefaults = sharedDefaults {
-            // Sync themeColor
-            let standardThemeColor = UserDefaults.standard.string(forKey: "themeColor")
-            if let themeColor = standardThemeColor {
-                sharedDefaults.set(themeColor, forKey: "themeColor")
-            }
-            
-            // Sync weeklyGoalMinutes
-            let standardWeeklyGoal = UserDefaults.standard.integer(forKey: "weeklyGoalMinutes")
-            if standardWeeklyGoal > 0 {
-                sharedDefaults.set(standardWeeklyGoal, forKey: "weeklyGoalMinutes")
-            }
+        let todayFocusMinutes = dataStore.getTodayCompletedWorkFocusMinutes()
+        let dailyFocusGoalMinutes: Int
+        if UserDefaults.standard.object(forKey: "dailyFocusGoalMinutes") == nil {
+            dailyFocusGoalMinutes = AppSettings.defaultDailyFocusGoalMinutes
+        } else {
+            dailyFocusGoalMinutes = UserDefaults.standard.integer(forKey: "dailyFocusGoalMinutes")
         }
         
-        // Get weekly goal from shared UserDefaults
-        let weeklyGoalMinutes = sharedDefaults?.integer(forKey: "weeklyGoalMinutes") ?? 0
-        let defaultGoal = weeklyGoalMinutes > 0 ? weeklyGoalMinutes : 1200 // Default 20 hours
-        
-        // Get accent color from shared UserDefaults (now synced from standard)
-        let themeColorString = sharedDefaults?.string(forKey: "themeColor") ?? ThemeColor.red.rawValue
-        
-        // Create widget data
+        // Create widget data (accent key kept for Codable; widget renders fixed cyan)
         let widgetData = WeeklyWidgetData(
             currentWeekTotalMinutes: currentWeekTotalMinutes,
-            weeklyGoalMinutes: defaultGoal,
+            todayFocusMinutes: todayFocusMinutes,
+            dailyFocusGoalMinutes: dailyFocusGoalMinutes,
             dailyTotals: dailyTotals,
-            accentColor: themeColorString,
+            accentColor: "Cyan",
             lastUpdated: now
         )
         

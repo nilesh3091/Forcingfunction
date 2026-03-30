@@ -7,7 +7,6 @@
 
 import SwiftUI
 import UIKit
-import Combine
 
 struct TimerView: View {
     @ObservedObject var viewModel: TimerViewModel
@@ -23,10 +22,6 @@ struct TimerView: View {
     @State private var lastHapticMajorTick: Int = -1  // Track last 5-minute mark for haptic feedback
     @State private var lastHapticTime: Date = Date()  // Throttle continuous feedback
     
-    // Day progress tracking
-    @State private var dayProgress: Double = 0.0  // 0.0 to 1.0 (0% to 100%)
-    @State private var isInitialLoad: Bool = true  // Track if this is the first progress update
-    
     // Haptic feedback helper functions
     private func triggerSelectionHaptic() {
         let generator = UISelectionFeedbackGenerator()
@@ -40,42 +35,29 @@ struct TimerView: View {
         generator.impactOccurred()
     }
     
-    // Day progress calculation
-    private func calculateDayProgress() -> Double {
-        let calendar = Calendar.current
-        let now = Date()
-        
-        // Get start of today (midnight) - returns non-optional Date
-        let startOfDay = calendar.startOfDay(for: now)
-        
-        // Get start of next day (next midnight)
-        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0.0 }
-        
-        // Calculate elapsed time since midnight
-        let elapsed = now.timeIntervalSince(startOfDay)
-        
-        // Calculate total time in the day (24 hours)
-        let totalDayDuration = startOfNextDay.timeIntervalSince(startOfDay)
-        
-        // Calculate progress (0.0 to 1.0)
-        let progress = elapsed / totalDayDuration
-        return min(1.0, max(0.0, progress))
+    /// Today’s target from the per-weekday schedule (Settings).
+    private func dailyGoalMinutes() -> Int {
+        viewModel.focusGoalMinutesForToday()
     }
     
-    private func updateDayProgress() {
-        let newProgress = calculateDayProgress()
-        // On initial load, update instantly without animation
-        if isInitialLoad {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                dayProgress = newProgress
-            }
-            isInitialLoad = false
-        } else {
-            // Subsequent updates animate smoothly over 60 seconds
-            dayProgress = newProgress
+    /// Completed focus today plus elapsed time in the current work session (if any).
+    private func effectiveTodayFocusMinutes() -> Double {
+        var total = Double(getTodayFocusMinutes())
+        if viewModel.currentSessionType == .work,
+           viewModel.timerState == .running || viewModel.timerState == .paused {
+            let totalSeconds = max(1, Int(viewModel.selectedMinutes * 60))
+            let elapsedSeconds = totalSeconds - viewModel.remainingSeconds
+            total += Double(elapsedSeconds) / 60.0
         }
+        return total
+    }
+    
+    /// Progress toward today’s focus goal (0…1), aligned with the “FOCUSED” line. No target → 0 progress.
+    private var focusGoalProgress: Double {
+        let goal = Double(dailyGoalMinutes())
+        if goal <= 0 { return 0 }
+        let m = effectiveTodayFocusMinutes()
+        return min(1.0, max(0.0, m / goal))
     }
     
     // Calculate today's total focus time in minutes
@@ -243,6 +225,15 @@ struct TimerView: View {
     private var theme: AppTheme {
         viewModel.theme
     }
+    
+    private var primaryActionLabelColor: Color {
+        switch viewModel.currentSessionType {
+        case .work:
+            return theme.buttonPrimaryText
+        case .shortBreak, .longBreak:
+            return Color(red: 0.05, green: 0.07, blue: 0.10)
+        }
+    }
 
     private struct PressableButtonStyle: ButtonStyle {
         let scale: CGFloat
@@ -282,73 +273,67 @@ struct TimerView: View {
             let handLength = dialSize * 0.40
 
             ZStack {
-                // Dark background
                 theme.background(.primary)
                     .ignoresSafeArea()
                 
+                HUDGridBackground(lineColor: theme.borderSecondary.opacity(0.45), spacing: 26, lineWidth: 0.5)
+                    .ignoresSafeArea()
+                
+                HUDEdgeVignette(color: theme.background(.primary))
+                    .opacity(0.4)
+                    .ignoresSafeArea()
+                
                 VStack(spacing: 0) {
-                    // Main heading
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Today")
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundColor(theme.text(.primary))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.leading, 20)
-                        
-                        // Day progress bar
-                        VStack(spacing: 6) {
-                            HStack {
-                                Text("Focused \(formatTodayFocusTime())")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(theme.text(.secondary))
-                                
-                                Spacer()
-                                
-                                Text("\(Int(dayProgress * 100))%")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(theme.text(.tertiary))
+                    // Mission-control status strip (monospace labels)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 6) {
+                            Text("FOCUSED \(formatTodayFocusTime())")
+                            Text("·")
+                                .foregroundColor(theme.text(.tertiary, opacity: 0.45))
+                            if dailyGoalMinutes() <= 0 {
+                                Text("NO DAILY TARGET")
+                            } else {
+                                Text("\(Int(focusGoalProgress * 100))% OF DAILY GOAL")
                             }
-                            
-                            GeometryReader { geometry in
-                                ZStack(alignment: .leading) {
-                                    // Background bar
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .fill(theme.background(.tertiary))
-                                        .frame(height: 6)
-                                    
-                                    // Progress bar
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .fill(theme.accent(opacity: 0.9))
-                                        .frame(width: geometry.size.width * dayProgress, height: 6)
-                                        .animation(.linear(duration: 60.0), value: dayProgress)
-                                }
-                            }
-                            .frame(height: 6)
                         }
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .tracking(0.6)
+                        .foregroundColor(theme.text(.tertiary))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(theme.borderPrimary.opacity(0.35))
+                                    .frame(height: 2)
+                                Rectangle()
+                                    .fill(theme.workAccent)
+                                    .frame(width: dailyGoalMinutes() <= 0 ? 0 : geometry.size.width * focusGoalProgress, height: 2)
+                                    .animation(.linear(duration: 0.35), value: focusGoalProgress)
+                            }
+                        }
+                        .frame(height: 2)
                         .padding(.horizontal, 20)
                     }
-                    .padding(.top, 20)
+                    .padding(.top, 16)
                     
                     Spacer()
                     
                     // Interactive circular dial
                     ZStack {
-                    // Outer ring with tick marks
+                    // Outer ring (thin)
                     Circle()
-                        .stroke(theme.borderPrimary, lineWidth: 2)
+                        .stroke(theme.borderPrimary.opacity(0.55), lineWidth: 1)
                         .frame(width: dialSize, height: dialSize)
                     
-                    // Swept area fill (pie slice showing covered area)
-                    // Show when idle (full size) or running/paused (shrinking as time progresses)
+                    // Swept accent fill: **idle only** (selected duration wedge). While running, % is the green ring only.
                     let pieAngle: Double = {
                         if viewModel.timerState == .idle {
-                            // When idle, show full selected time
                             let currentTotalAngle = isDragging ? cumulativeDragAngle : viewModel.currentAngle
-                            return min(currentTotalAngle, 360.0)  // Hard limit at 360° (60 minutes)
+                            return min(currentTotalAngle, 360.0)
                         } else {
-                            // When running/paused, show remaining time (shrinking pie)
-                            let remainingAngle = viewModel.currentAngle * (1.0 - viewModel.progress)
-                            return max(0, min(remainingAngle, 360.0))
+                            return 0
                         }
                     }()
                     
@@ -357,32 +342,31 @@ struct TimerView: View {
                         SweptAreaView(
                             totalAngle: pieAngle,
                             dialSize: dialSize,
-                            color: theme.accentColor  // Full opacity solid color
+                            color: viewModel.sessionAccentColor
                         )
                     }
                     
-                    // Tick marks (minor every 1 minute, major every 5 minutes)
-                    ForEach(0..<60) { minute in
+                    // Major ticks only (every 5 minutes)
+                    ForEach(0..<12) { i in
+                        let minute = i * 5
                         let angle = (Double(minute) * 6.0) - 90.0
-                        let isMajor = minute % 5 == 0
-                        let tickLength: CGFloat = isMajor ? 12 : 6
-                        let tickWidth: CGFloat = isMajor ? 2 : 1
-                        let tickColor = theme.text(.tertiary, opacity: isMajor ? 0.75 : 0.35)
-
-                        RoundedRectangle(cornerRadius: tickWidth)
-                            .fill(tickColor)
+                        let tickLength: CGFloat = 10
+                        let tickWidth: CGFloat = 1
+                        RoundedRectangle(cornerRadius: 0.5)
+                            .fill(theme.text(.tertiary, opacity: 0.4))
                             .frame(width: tickWidth, height: tickLength)
                             .offset(y: -dialSize / 2 + tickLength / 2)
                             .rotationEffect(.degrees(angle))
                     }
                     
-                    // Progress arc (filled portion)
+                    // Progress ring: full circumference = 0–100% of session
                     if viewModel.timerState == .running || viewModel.timerState == .paused {
+                        let ringTrim = min(1.0, max(0.0, viewModel.progress))
                         Circle()
-                            .trim(from: 0, to: viewModel.progress)
+                            .trim(from: 0, to: ringTrim)
                             .stroke(
-                                theme.accentColor,
-                                style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                                viewModel.sessionAccentColor,
+                                style: StrokeStyle(lineWidth: 5, lineCap: .round)
                             )
                             .frame(width: dialSize, height: dialSize)
                             .rotationEffect(.degrees(-90))
@@ -391,22 +375,21 @@ struct TimerView: View {
 
                     // Progress head: circular endcap with percent
                     if viewModel.timerState == .running || viewModel.timerState == .paused {
-                        let angle = (viewModel.progress * 360.0) - 90.0
+                        let angle = viewModel.progress * 360.0 - 90.0
                         let r = (dialSize / 2)
                         let x = (dialSize / 2) + (CGFloat(cos(angle * .pi / 180.0)) * r)
                         let y = (dialSize / 2) + (CGFloat(sin(angle * .pi / 180.0)) * r)
                         let pctA11y = Int((viewModel.progress * 100).rounded())
-                        let headSize: CGFloat = 28
+                        let headSize: CGFloat = 22
 
                         ZStack {
                             Circle()
-                                .fill(theme.accentColor)
-                                .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 5)
+                                .fill(viewModel.sessionAccentColor)
 
                             Color.clear
                                 .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundColor(Color.white.opacity(0.95))
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundColor(Color.white.opacity(0.92))
                                 .monospacedDigit()
                         }
                         .frame(width: headSize, height: headSize)
@@ -433,16 +416,16 @@ struct TimerView: View {
                         }
                     }()
                     
-                    // Hand/needle (slim, calm)
+                    // Hand/needle
                     ZStack {
                         Capsule(style: .continuous)
-                            .fill(theme.text(.primary, opacity: 0.92))
-                            .frame(width: 3, height: handLength)
+                            .fill(theme.text(.primary, opacity: 0.85))
+                            .frame(width: 2, height: handLength)
 
                         Circle()
-                            .fill(theme.accent(opacity: 0.85))
-                            .frame(width: 6, height: 6)
-                            .offset(y: -handLength / 2 + 6)
+                            .fill(viewModel.sessionAccentColor.opacity(0.8))
+                            .frame(width: 5, height: 5)
+                            .offset(y: -handLength / 2 + 5)
                     }
                     .offset(y: -handLength / 2)
                     .rotationEffect(.degrees(handAngle))
@@ -451,17 +434,13 @@ struct TimerView: View {
                     // Center knob
                     Circle()
                         .fill(theme.text(.primary))
-                        .frame(width: knobSize, height: knobSize)
-                        .shadow(color: isDragging ? theme.accent(opacity: 0.35) : Color.clear, radius: 10, x: 0, y: 6)
+                        .frame(width: knobSize - 2, height: knobSize - 2)
                         .overlay(
-                            ZStack {
-                                Circle()
-                                    .stroke(theme.accentColor, lineWidth: 2)
-                                    .frame(width: knobSize, height: knobSize)
-                            }
+                            Circle()
+                                .stroke(viewModel.sessionAccentColor.opacity(0.9), lineWidth: 1)
                         )
-                        .scaleEffect(isDragging ? 1.1 : 1.0)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isDragging)
+                        .scaleEffect(isDragging ? 1.04 : 1.0)
+                        .animation(.spring(response: 0.2, dampingFraction: 0.65), value: isDragging)
                     }
                     .frame(width: dialSize, height: dialSize)
                 .gesture(
@@ -561,7 +540,7 @@ struct TimerView: View {
                             if isDragging && viewModel.timerState == .idle {
                                 // Use cumulative angle for final calculation
                                 // Apply snapping only when drag ends
-                                viewModel.setTimeFromAngle(cumulativeDragAngle)
+                                viewModel.setTimeFromAngle(cumulativeDragAngle, force: true)
                             }
                             isDragging = false
                             dragRemainingSeconds = 0  // Reset drag display
@@ -585,35 +564,52 @@ struct TimerView: View {
                         : AngleUtilities.formatTimeMinutesOnly(displaySeconds)  // Show MM:00 when idle
                     
                     Text(timeText)
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .foregroundColor(theme.text(.primary))
+                        .font(.system(size: 44, weight: .medium, design: .monospaced))
+                        .foregroundColor(viewModel.sessionAccentColor)
                         .monospacedDigit()
+                        .tracking(2)
+                        .shadow(color: viewModel.sessionAccentColor.opacity(0.22), radius: 12, x: 0, y: 0)
                         .accessibilityLabel("Remaining time: \(timeText)")
                     }
-                    .padding(.top, 18)
+                    .padding(.top, 14)
                     
                     Spacer()
                     
                     // Control buttons
-                    HStack(spacing: 20) {
+                    HStack(spacing: 12) {
                     if viewModel.timerState == .running || viewModel.timerState == .paused {
-                        // Reset button
+                        // End button
                         Button(action: {
+                            if viewModel.hapticsEnabled {
+                                HapticManager.playSelection()
+                            }
                             viewModel.resetTimer()
                         }) {
-                            Text("Reset")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(theme.buttonSecondaryText)
+                            Text("End")
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .tracking(0.4)
+                                .foregroundColor(theme.destructiveAccent)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(theme.buttonSecondary)
-                                .cornerRadius(12)
+                                .padding(.vertical, 14)
+                                .background(Color.clear)
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(theme.destructiveAccent.opacity(0.95), lineWidth: 1)
+                                )
                         }
-                        .accessibilityLabel("Reset timer")
+                        .accessibilityLabel("End timer")
                             .buttonStyle(PressableButtonStyle())
                         
                         // Pause/Resume button
                         Button(action: {
+                            if viewModel.hapticsEnabled {
+                                if viewModel.timerState == .running {
+                                    HapticManager.playImpact(style: .light)
+                                } else {
+                                    HapticManager.playImpact(style: .medium)
+                                }
+                            }
                             if viewModel.timerState == .running {
                                 viewModel.pauseTimer()
                             } else {
@@ -621,36 +617,53 @@ struct TimerView: View {
                             }
                         }) {
                             Text(viewModel.timerState == .running ? "Pause" : "Resume")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(theme.buttonPrimaryText)
+                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                .tracking(0.5)
+                                .foregroundColor(primaryActionLabelColor)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(theme.buttonPrimary)
-                                .cornerRadius(12)
-                                    .shadow(color: Color.black.opacity(0.22), radius: 10, x: 0, y: 6)
+                                .padding(.vertical, 14)
+                                .background(viewModel.sessionAccentColor)
+                                .cornerRadius(8)
                         }
                         .accessibilityLabel(viewModel.timerState == .running ? "Pause timer" : "Resume timer")
                             .buttonStyle(PressableButtonStyle())
                     } else {
                         // Start button (full width when idle)
                         Button(action: {
+                            if viewModel.hapticsEnabled {
+                                HapticManager.playImpact(style: .medium)
+                            }
+                            // Commit dial drag before starting so `selectedMinutes` matches what the user sees
+                            // (avoids taps before DragGesture.onEnded updates the view model).
+                            if isDragging {
+                                viewModel.setTimeFromAngle(cumulativeDragAngle, force: true)
+                                isDragging = false
+                                dragRemainingSeconds = 0
+                                cumulativeDragAngle = 0
+                                lastDragAngle = 0
+                                lastHapticMinute = -1
+                                lastHapticMajorTick = -1
+                            }
                             viewModel.startTimer()
                         }) {
-                                Text("Start")
-                                    .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(theme.buttonPrimaryText)
+                            Text("Start")
+                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                .tracking(0.8)
+                                .foregroundColor(theme.breakAccent)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 18)
-                                .background(theme.buttonPrimary)
-                                .cornerRadius(16)
-                                    .shadow(color: Color.black.opacity(0.24), radius: 12, x: 0, y: 7)
+                                .padding(.vertical, 15)
+                                .background(Color.clear)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(theme.breakAccent.opacity(0.95), lineWidth: 1)
+                                )
                         }
                         .accessibilityLabel("Start session")
                             .buttonStyle(PressableButtonStyle(scale: 0.985, opacity: 0.94))
                     }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 36)
                 }
             }
         }
@@ -659,10 +672,6 @@ struct TimerView: View {
         .onAppear {
             viewModel.updateSettings()
             viewModel.syncTimerState()
-            updateDayProgress()
-        }
-        .onReceive(Timer.publish(every: 60.0, on: .main, in: .common).autoconnect()) { _ in
-            updateDayProgress()
         }
     }
 }
@@ -678,11 +687,10 @@ struct SweptAreaView: View {
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             let radius = min(geometry.size.width, geometry.size.height) / 2
 
-            // Minimal, calm fill: low-contrast gradient with subtle edge definition.
             let fillGradient = RadialGradient(
                 gradient: Gradient(colors: [
-                    color.opacity(0.26),
-                    color.opacity(0.18)
+                    color.opacity(0.42),
+                    color.opacity(0.30)
                 ]),
                 center: .center,
                 startRadius: 0,
@@ -701,9 +709,8 @@ struct SweptAreaView: View {
                         .frame(width: dialSize, height: dialSize)
                         .overlay(
                             Circle()
-                                .stroke(color.opacity(0.22), lineWidth: 1)
+                                .stroke(color.opacity(0.35), lineWidth: 1)
                         )
-                        .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 6)
                 } else {
                     Path { path in
                         path.move(to: center)
@@ -729,9 +736,8 @@ struct SweptAreaView: View {
                             )
                             path.closeSubpath()
                         }
-                        .stroke(color.opacity(0.22), lineWidth: 1)
+                        .stroke(color.opacity(0.35), lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.16), radius: 8, x: 0, y: 5)
                 }
             }
         }
@@ -873,12 +879,21 @@ struct SessionBlockView: View {
     let blockWidth: CGFloat
     let theme: AppTheme
     
+    private var blockColor: Color {
+        switch session.sessionType {
+        case .work:
+            return theme.workAccent
+        case .shortBreak, .longBreak:
+            return theme.breakAccent
+        }
+    }
+    
     var body: some View {
         // Center the block at the completion time position
         let xPosition = geometry.size.width * position
         
         RoundedRectangle(cornerRadius: 1)
-            .fill(theme.success)
+            .fill(blockColor)
             .frame(width: blockWidth, height: 10)
             .offset(x: xPosition - blockWidth / 2, y: 0)
     }

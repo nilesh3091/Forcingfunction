@@ -11,9 +11,11 @@ import SwiftUI
 // Shared data structure - must match WidgetDataManager.swift
 struct WeeklyWidgetData: Codable {
     let currentWeekTotalMinutes: Int
-    let weeklyGoalMinutes: Int
+    let todayFocusMinutes: Int
+    let dailyFocusGoalMinutes: Int
     let dailyTotals: [Int] // [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
-    let accentColor: String // "Red", "Blue", or "Green"
+    /// Legacy Codable field; UI uses fixed cyan (`AppTheme.standard.workAccent`).
+    let accentColor: String
     let lastUpdated: Date
 }
 
@@ -26,7 +28,7 @@ struct WeeklyPomodoroWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Weekly Pomodoro")
-        .description("Track your weekly Pomodoro focus time and daily progress.")
+        .description("See today’s progress toward your daily focus goal and your week at a glance.")
         .supportedFamilies([.systemMedium])
     }
 }
@@ -58,9 +60,10 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
         WeeklyPomodoroEntry(
             date: Date(),
             currentWeekTotalMinutes: 125,
-            weeklyGoalMinutes: 1200,
+            todayFocusMinutes: 45,
+            dailyFocusGoalMinutes: 120,
             dailyTotals: [30, 45, 0, 50, 0, 0, 0],
-            accentColor: "Red"
+            accentColor: "Cyan"
         )
     }
     
@@ -110,9 +113,10 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
             return WeeklyPomodoroEntry(
                 date: Date(),
                 currentWeekTotalMinutes: 0,
-                weeklyGoalMinutes: 1200,
+                todayFocusMinutes: 0,
+                dailyFocusGoalMinutes: 120,
                 dailyTotals: [0, 0, 0, 0, 0, 0, 0],
-                accentColor: "Red"
+                accentColor: "Cyan"
             )
         }
         
@@ -123,9 +127,10 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
             return WeeklyPomodoroEntry(
                 date: Date(),
                 currentWeekTotalMinutes: 0,
-                weeklyGoalMinutes: 1200,
+                todayFocusMinutes: 0,
+                dailyFocusGoalMinutes: 120,
                 dailyTotals: [0, 0, 0, 0, 0, 0, 0],
-                accentColor: "Red"
+                accentColor: "Cyan"
             )
         }
         
@@ -137,16 +142,18 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
             return WeeklyPomodoroEntry(
                 date: Date(),
                 currentWeekTotalMinutes: 0,
-                weeklyGoalMinutes: widgetData.weeklyGoalMinutes, // Keep the goal setting
+                todayFocusMinutes: 0,
+                dailyFocusGoalMinutes: widgetData.dailyFocusGoalMinutes,
                 dailyTotals: [0, 0, 0, 0, 0, 0, 0],
-                accentColor: widgetData.accentColor // Keep the accent color
+                accentColor: widgetData.accentColor
             )
         }
         
         return WeeklyPomodoroEntry(
             date: widgetData.lastUpdated,
             currentWeekTotalMinutes: widgetData.currentWeekTotalMinutes,
-            weeklyGoalMinutes: widgetData.weeklyGoalMinutes,
+            todayFocusMinutes: widgetData.todayFocusMinutes,
+            dailyFocusGoalMinutes: widgetData.dailyFocusGoalMinutes,
             dailyTotals: widgetData.dailyTotals,
             accentColor: widgetData.accentColor
         )
@@ -156,7 +163,8 @@ struct WeeklyPomodoroTimelineProvider: TimelineProvider {
 struct WeeklyPomodoroEntry: TimelineEntry {
     let date: Date
     let currentWeekTotalMinutes: Int
-    let weeklyGoalMinutes: Int
+    let todayFocusMinutes: Int
+    let dailyFocusGoalMinutes: Int
     let dailyTotals: [Int] // [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
     let accentColor: String
 }
@@ -164,25 +172,14 @@ struct WeeklyPomodoroEntry: TimelineEntry {
 struct WeeklyPomodoroWidgetEntryView: View {
     var entry: WeeklyPomodoroEntry
     
-    var accentColor: Color {
-        switch entry.accentColor {
-        case "Blue":
-            return .blue
-        case "Green":
-            return .green
-        default:
-            return .red
-        }
+    /// Matches main app `AppTheme.standard.workAccent` (~`#42d7ff`).
+    private var widgetAccentColor: Color {
+        Color(red: 66.0 / 255.0, green: 215.0 / 255.0, blue: 1.0)
     }
     
     var progress: Double {
-        guard entry.weeklyGoalMinutes > 0 else { return 0 }
-        return min(1.0, Double(entry.currentWeekTotalMinutes) / Double(entry.weeklyGoalMinutes))
-    }
-    
-    var completionPercentage: Double {
-        guard entry.weeklyGoalMinutes > 0 else { return 0 }
-        return Double(entry.currentWeekTotalMinutes) / Double(entry.weeklyGoalMinutes)
+        guard entry.dailyFocusGoalMinutes > 0 else { return 0 }
+        return min(1.0, Double(entry.todayFocusMinutes) / Double(entry.dailyFocusGoalMinutes))
     }
     
     var maxDailyTotal: Int {
@@ -202,7 +199,7 @@ struct WeeklyPomodoroWidgetEntryView: View {
                     Circle()
                         .trim(from: 0, to: progress)
                         .stroke(
-                            accentColor,
+                            widgetAccentColor,
                             style: StrokeStyle(lineWidth: 6, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
@@ -211,14 +208,14 @@ struct WeeklyPomodoroWidgetEntryView: View {
                     // Content inside ring: percentage centered, time at bottom
                     ZStack {
                         // Percentage centered - thinner font weight
-                        Text("\(Int(completionPercentage * 100))%")
+                        Text("\(Int(progress * 100))%")
                             .font(.system(size: 32, weight: .medium, design: .default))
                             .foregroundColor(.white)
                         
                         // Time at bottom - keep at same position
                         VStack {
                             Spacer()
-                            Text(formatTime(entry.currentWeekTotalMinutes))
+                            Text(formatTime(entry.todayFocusMinutes))
                                 .font(.system(size: 11, weight: .regular, design: .rounded))
                                 .foregroundColor(.white.opacity(0.7))
                                 .padding(.bottom, 18)
@@ -228,12 +225,15 @@ struct WeeklyPomodoroWidgetEntryView: View {
                 .frame(width: 125, height: 125)
             }
             
-            // Right: Weekly Goal and Daily Breakdown
+            // Right: Daily goal + weekly chart
             VStack(alignment: .leading, spacing: 8) {
-                // Weekly goal
-                Text("Weekly goal: \(formatTimeGoal(entry.weeklyGoalMinutes))")
+                Text("Daily goal: \(formatTimeGoal(entry.dailyFocusGoalMinutes))")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.white)
+                
+                Text("This week: \(formatTime(entry.currentWeekTotalMinutes))")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(.white.opacity(0.75))
                 
                 Spacer()
                 
@@ -259,7 +259,7 @@ struct WeeklyPomodoroWidgetEntryView: View {
                     }()
                     
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(dailyMinutes > 0 ? accentColor : Color.gray.opacity(0.3))
+                        .fill(dailyMinutes > 0 ? widgetAccentColor : Color.gray.opacity(0.3))
                         .frame(width: 11.52, height: barHeight)
                             
                             // Day label
@@ -318,16 +318,18 @@ struct WeeklyPomodoroWidgetEntryView: View {
     WeeklyPomodoroEntry(
         date: Date(),
         currentWeekTotalMinutes: 125,
-        weeklyGoalMinutes: 1200,
+        todayFocusMinutes: 45,
+        dailyFocusGoalMinutes: 120,
         dailyTotals: [30, 45, 0, 50, 0, 0, 0],
-        accentColor: "Red"
+        accentColor: "Cyan"
     )
     WeeklyPomodoroEntry(
         date: Date(),
         currentWeekTotalMinutes: 0,
-        weeklyGoalMinutes: 1200,
+        todayFocusMinutes: 0,
+        dailyFocusGoalMinutes: 120,
         dailyTotals: [0, 0, 0, 0, 0, 0, 0],
-        accentColor: "Blue"
+        accentColor: "Cyan"
     )
 }
 

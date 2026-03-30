@@ -638,7 +638,21 @@ struct PomodoroSessionCard: View {
     
     private let calendar = Calendar.current
     
+    /// Cancelled after some work, but before the planned duration ended.
+    private var isPartialCancelledIncomplete: Bool {
+        guard session.status == .cancelled, session.endTime != nil else { return false }
+        let elapsed = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
+        let planned = session.plannedDurationMinutes
+        return elapsed > 0 && elapsed < planned
+    }
+    
     private var durationString: String {
+        if isPartialCancelledIncomplete {
+            let elapsed = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
+            let planned = Int(session.plannedDurationMinutes.rounded())
+            let completed = min(Int(floor(elapsed)), planned)
+            return "\(completed) / \(planned) min"
+        }
         if let activeDuration = session.activeDurationMinutes {
             let minutes = Int(activeDuration)
             return "\(minutes) min"
@@ -682,7 +696,7 @@ struct PomodoroSessionCard: View {
         case .completed:
             return accentColor
         case .cancelled:
-            return .gray
+            return isPartialCancelledIncomplete ? .orange : .gray
         case .paused, .running:
             return .orange
         }
@@ -693,7 +707,7 @@ struct PomodoroSessionCard: View {
         case .completed:
             return "Completed"
         case .cancelled:
-            return "Cancelled"
+            return isPartialCancelledIncomplete ? "Incomplete" : "Cancelled"
         case .paused:
             return "Paused"
         case .running:

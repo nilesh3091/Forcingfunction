@@ -39,6 +39,17 @@ class PomodoroDataStore {
             decoder.dateDecodingStrategy = .iso8601
             sessions = try decoder.decode([PomodoroSession].self, from: data)
             
+            let beforeCount = sessions.count
+            sessions.removeAll { session in
+                guard session.sessionType == .work else { return false }
+                guard session.status == .completed || session.status == .cancelled else { return false }
+                let minutes = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
+                return minutes < PomodoroSession.minimumRecordedWorkMinutes
+            }
+            if sessions.count != beforeCount {
+                saveSessions()
+            }
+            
             // Sort by start time (most recent first)
             sessions.sort { $0.startTime > $1.startTime }
         } catch {
@@ -82,6 +93,24 @@ class PomodoroDataStore {
         }
     }
     
+    /// Persists a session after it has ended. Work sessions under `minimumRecordedWorkMinutes` are removed instead.
+    func finalizeEndedSession(_ session: PomodoroSession) {
+        guard session.sessionType == .work else {
+            updateSession(session)
+            return
+        }
+        guard session.status == .completed || session.status == .cancelled else {
+            updateSession(session)
+            return
+        }
+        let minutes = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
+        if minutes >= PomodoroSession.minimumRecordedWorkMinutes {
+            updateSession(session)
+        } else {
+            deleteSession(byId: session.id)
+        }
+    }
+    
     /// Get all sessions
     func getAllSessions() -> [PomodoroSession] {
         return sessions
@@ -113,6 +142,35 @@ class PomodoroDataStore {
     func getTotalFocusMinutes() -> Int {
         let completedWorkSessions = getCompletedWorkSessions()
         let totalMinutes = completedWorkSessions.compactMap { $0.activeDurationMinutes ?? $0.actualDurationMinutes }.reduce(0, +)
+        return Int(totalMinutes)
+    }
+    
+    /// Completed work focus minutes for the current calendar day (same rules as the main timer’s “today” total).
+    func getTodayCompletedWorkFocusMinutes() -> Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
+        
+        let todaySessions = sessions.filter { session in
+            session.sessionType == .work &&
+            session.status == .completed &&
+            session.startTime >= startOfDay &&
+            session.startTime < startOfNextDay
+        }
+        
+        var totalMinutes: Double = 0
+        for session in todaySessions {
+            if let activeDuration = session.activeDurationMinutes {
+                totalMinutes += activeDuration
+            } else if let actualDuration = session.actualDurationMinutes {
+                totalMinutes += actualDuration
+            } else if let endTime = session.endTime {
+                totalMinutes += endTime.timeIntervalSince(session.startTime) / 60.0
+            } else {
+                totalMinutes += session.plannedDurationMinutes
+            }
+        }
         return Int(totalMinutes)
     }
     
@@ -191,7 +249,7 @@ class PomodoroDataStore {
                 session.events.append(completeEvent)
                 session.endTime = now
                 session.status = .completed
-                updateSession(session)
+                finalizeEndedSession(session)
                 print("Completed expired session: \(session.id) - elapsed: \(elapsedMinutes)min, planned: \(session.plannedDurationMinutes)min")
             }
         }

@@ -31,7 +31,8 @@ class TimerViewModel: ObservableObject {
     @AppStorage("playSoundOnCompletion") var playSoundOnCompletion: Bool = true
     @AppStorage("hapticsEnabled") var hapticsEnabled: Bool = true
     @AppStorage("liveActivitiesEnabled") var liveActivitiesEnabled: Bool = true
-    @AppStorage("themeColor") var themeColorString: String = ThemeColor.red.rawValue
+    @AppStorage("dailyFocusGoalMinutes") var dailyFocusGoalMinutes: Int = AppSettings.defaultDailyFocusGoalMinutes
+    @AppStorage("hasMigratedToSingleDailyGoal") private var hasMigratedToSingleDailyGoal: Bool = false
     
     // MARK: - Timer State Persistence (using @AppStorage)
     @AppStorage("savedTimerState") private var savedTimerStateRaw: String = ""
@@ -59,18 +60,31 @@ class TimerViewModel: ObservableObject {
     private let backgroundTaskManager = BackgroundTaskManager.shared
     
     // MARK: - Computed Properties
-    var themeColor: ThemeColor {
-        ThemeColor(rawValue: themeColorString) ?? .red
-    }
     
     /// Centralized theme system - use this for all styling
     var theme: AppTheme {
-        themeColor.theme
+        AppTheme.standard
     }
     
-    /// Accent color (backward compatibility - use theme.accentColor instead)
+    /// Global accent (work / cyan) — tabs, settings, calendar, stats.
     var accentColor: Color {
         theme.accentColor
+    }
+    
+    /// Work vs break accent for timer dial, readout, and primary session controls.
+    var sessionAccentColor: Color {
+        switch currentSessionType {
+        case .work:
+            return theme.workAccent
+        case .shortBreak, .longBreak:
+            return theme.breakAccent
+        }
+    }
+    
+    // MARK: - Focus goal (single daily target, minutes)
+    
+    func focusGoalMinutesForToday() -> Int {
+        max(0, dailyFocusGoalMinutes)
     }
     
     var minMinutes: Double {
@@ -101,10 +115,11 @@ class TimerViewModel: ObservableObject {
         return angle
     }
     
+    /// Hand position while running: sweeps **backward** along the selected-duration arc from the end toward 12 o’clock.
+    /// (Progress **percentage** is shown by the separate full-circle green ring in `TimerView`, not by this angle.)
     var elapsedAngle: Double {
         guard selectedMinutes >= 0 else { return 0 }
         let progress = self.progress
-        // Rotate counter-clockwise from currentAngle back to 0 (12 o'clock)
         return currentAngle * (1.0 - progress)
     }
     
@@ -125,6 +140,22 @@ class TimerViewModel: ObservableObject {
         // Migrate snap increment from old 15-minute default to new 1-minute default
         if snapIncrement == 15.0 {
             snapIncrement = AppSettings.defaultSnapIncrement
+        }
+        
+        // Single daily goal: migrate from per-weekday JSON or legacy weekly ÷ 7
+        if !hasMigratedToSingleDailyGoal {
+            var migrated = AppSettings.defaultDailyFocusGoalMinutes
+            if let json = UserDefaults.standard.string(forKey: "dailyFocusGoalMinutesByWeekdayJSON"), !json.isEmpty,
+               let data = json.data(using: .utf8),
+               let arr = try? JSONDecoder().decode([Int].self, from: data), arr.count == 7 {
+                migrated = max(0, arr.reduce(0, +) / 7)
+            } else {
+                let w = UserDefaults.standard.integer(forKey: "weeklyGoalMinutes")
+                if w > 0 { migrated = max(1, w / 7) }
+            }
+            dailyFocusGoalMinutes = min(24 * 60, max(0, migrated))
+            hasMigratedToSingleDailyGoal = true
+            WidgetDataManager.shared.updateWidgetData()
         }
         
         // Migrate maxMinutes if it was set to old 120-minute value
@@ -180,6 +211,19 @@ class TimerViewModel: ObservableObject {
         dataStore.cleanupOrphanedSessions()
     }
     
+    /// Keeps the device from auto-locking while a session is active (running or paused).
+    private func updateIdleTimerForSession() {
+        let keepAwake = (timerState == .running || timerState == .paused)
+        let apply = {
+            UIApplication.shared.isIdleTimerDisabled = keepAwake
+        }
+        if Thread.isMainThread {
+            apply()
+        } else {
+            DispatchQueue.main.async(execute: apply)
+        }
+    }
+    
     // MARK: - Statistics Loading
     private func loadStatistics() {
         completedPomodoros = dataStore.getCompletedPomodorosCount()
@@ -197,6 +241,7 @@ class TimerViewModel: ObservableObject {
         guard selectedMinutes > 0 else { return }
         
         let now = Date()
+        let resumeFromPaused = (timerState == .paused)
         
         if timerState == .paused {
             // Resume from paused state
@@ -265,7 +310,16 @@ class TimerViewModel: ObservableObject {
         }
         
         timerState = .running
-        startTime = now
+        updateIdleTimerForSession()
+        // New sessions need a fresh wall-clock anchor. Resuming must keep the original `startTime`
+        // so `tick()`'s elapsed math stays consistent with `pausedDuration` (otherwise remaining jumps to full duration).
+        if resumeFromPaused {
+            if startTime == nil {
+                startTime = now
+            }
+        } else {
+            startTime = now
+        }
         
         // Save timer state to disk
         saveTimerState()
@@ -278,10 +332,6 @@ class TimerViewModel: ObservableObject {
             }
         }
         
-        if hapticsEnabled {
-            HapticManager.playImpact(style: .medium)
-        }
-        
         scheduleNotification()
         startTimerTicking()
     }
@@ -290,6 +340,7 @@ class TimerViewModel: ObservableObject {
         guard timerState == .running else { return }
         
         timerState = .paused
+        updateIdleTimerForSession()
         pausedSeconds = remainingSeconds
         pauseStartTime = Date()  // Track when pause started
         timer?.invalidate()
@@ -322,10 +373,6 @@ class TimerViewModel: ObservableObject {
         
         // Save timer state to disk
         saveTimerState()
-        
-        if hapticsEnabled {
-            HapticManager.playImpact(style: .light)
-        }
     }
     
     func resetTimer() {
@@ -339,11 +386,12 @@ class TimerViewModel: ObservableObject {
             session.events.append(cancelEvent)
             session.endTime = now
             session.status = .cancelled
-            dataStore.updateSession(session)
+            dataStore.finalizeEndedSession(session)
             currentSession = nil
         }
         
         timerState = .idle
+        updateIdleTimerForSession()
         remainingSeconds = Int(selectedMinutes * 60)
         pausedSeconds = remainingSeconds
         startTime = nil
@@ -362,10 +410,6 @@ class TimerViewModel: ObservableObject {
         
         // Clear saved timer state
         clearTimerState()
-        
-        if hapticsEnabled {
-            HapticManager.playSelection()
-        }
     }
     
     func endSession() {
@@ -397,7 +441,7 @@ class TimerViewModel: ObservableObject {
             session.events.append(completeEvent)
             session.endTime = now
             session.status = .completed
-            dataStore.updateSession(session)
+            dataStore.finalizeEndedSession(session)
             
             // Update statistics if it was a work session
             if session.sessionType == .work {
@@ -415,6 +459,7 @@ class TimerViewModel: ObservableObject {
         // Reset to default idle state when completed
         // This matches the default state when app opens
         timerState = .idle
+        updateIdleTimerForSession()
         
         // Reset to default time based on session type
         // Default is 25 minutes for work (matching app initialization)
@@ -488,6 +533,7 @@ class TimerViewModel: ObservableObject {
         remainingSeconds = Int(selectedMinutes * 60)
         pausedSeconds = remainingSeconds
         timerState = .idle
+        updateIdleTimerForSession()
         
         // Auto-start the next session if enabled
         if autoStartNext {
@@ -499,19 +545,20 @@ class TimerViewModel: ObservableObject {
     }
     
     // MARK: - Time Selection
-    func setTimeFromAngle(_ angle: Double) {
+    func setTimeFromAngle(_ angle: Double, force: Bool = false) {
         let newMinutes = AngleUtilities.angleToMinutes(angle, minMinutes: minMinutes, maxMinutes: maxMinutes, snapIncrement: snapIncrement)
         
         // Round to whole minutes
         let wholeMinutes = round(newMinutes)
         
-        if abs(wholeMinutes - selectedMinutes) > 0.01 && timerState == .idle {
+        guard timerState == .idle else { return }
+        if force || abs(wholeMinutes - selectedMinutes) > 0.01 {
             selectedMinutes = wholeMinutes
             remainingSeconds = Int(wholeMinutes * 60)
             pausedSeconds = remainingSeconds
             
-            // Haptic feedback on minute change
-            if hapticsEnabled {
+            // Haptic feedback on minute change (skip when forced — caller or drag handles feedback)
+            if hapticsEnabled && !force {
                 HapticManager.playSelection()
             }
         }
@@ -873,6 +920,7 @@ class TimerViewModel: ObservableObject {
         // Restore timer state
         if savedTimerStateRaw == "running" {
             timerState = .running
+            updateIdleTimerForSession()
             
             // If timer should have completed, end the session
             if calculatedRemaining <= 0 {
@@ -912,6 +960,7 @@ class TimerViewModel: ObservableObject {
             }
         } else if savedTimerStateRaw == "paused" {
             timerState = .paused
+            updateIdleTimerForSession()
             
             // Ensure currentSession exists
             ensureCurrentSessionExists()
@@ -945,6 +994,13 @@ class TimerViewModel: ObservableObject {
     deinit {
         timer?.invalidate()
         cancelNotification()
+        if Thread.isMainThread {
+            UIApplication.shared.isIdleTimerDisabled = false
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.isIdleTimerDisabled = false
+            }
+        }
     }
 }
 

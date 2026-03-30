@@ -17,7 +17,7 @@
 //  - Minimum/Maximum minutes: Edit AppSettings.defaultMinMinutes and 
 //    AppSettings.defaultMaxMinutes in Models.swift
 //  - Default durations: Edit AppSettings defaults in Models.swift
-//  - Theme colors: Modify ThemeColor enum in Models.swift
+//  - Theme colors: Fixed palette in `AppTheme.standard` (Models.swift)
 //  - Debug speed multiplier: Edit TimerViewModel.tick() method (currently 60x faster in DEBUG)
 //
 //  Created by Nilesh Kumar on 12/11/25.

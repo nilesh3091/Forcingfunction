@@ -19,27 +19,18 @@ enum SessionType: String, CaseIterable, Codable {
     }
 }
 
-/// Theme color options for the app accent
-enum ThemeColor: String, CaseIterable {
-    case red = "Red"
-    case blue = "Blue"
-    case green = "Green"
-    
-    var colorValue: String {
-        return self.rawValue.lowercased()
-    }
-    
-    /// Returns the AppTheme instance for this theme color
-    var theme: AppTheme {
-        AppTheme(accentColor: self)
-    }
-}
-
 // MARK: - App Theme System
 
 /// Centralized theme system for app-wide styling
 /// All colors used throughout the app should come from this struct
 struct AppTheme {
+    /// Work / focus / global accent (~`#42d7ff`).
+    let workAccent: Color
+    /// Short & long break sessions (~`#39ff14`).
+    let breakAccent: Color
+    /// End / destructive outline actions (muted red).
+    let destructiveAccent: Color
+
     // MARK: - Accent Colors
     let accentColor: Color
     let accentColorLight: Color
@@ -85,65 +76,58 @@ struct AppTheme {
     let shadowLight: Color
     let shadowMedium: Color
     let shadowHeavy: Color
-    
-    /// Initialize theme with accent color
-    init(accentColor: ThemeColor) {
-        // Set accent colors based on theme
-        switch accentColor {
-        case .red:
-            self.accentColor = .red
-            self.accentColorLight = Color(red: 1.0, green: 0.4, blue: 0.4)
-            self.accentColorDark = Color(red: 0.7, green: 0.0, blue: 0.0)
-        case .blue:
-            self.accentColor = .blue
-            self.accentColorLight = Color(red: 0.4, green: 0.6, blue: 1.0)
-            self.accentColorDark = Color(red: 0.0, green: 0.2, blue: 0.7)
-        case .green:
-            self.accentColor = .green
-            self.accentColorLight = Color(red: 0.4, green: 0.9, blue: 0.4)
-            self.accentColorDark = Color(red: 0.0, green: 0.6, blue: 0.0)
-        }
+
+    /// Fixed exam-style palette on deep charcoal (HUD canvas).
+    static let standard = AppTheme()
+
+    private init() {
+        let work = Color(red: 66.0 / 255.0, green: 215.0 / 255.0, blue: 1.0)
+        let breakNeon = Color(red: 57.0 / 255.0, green: 1.0, blue: 20.0 / 255.0)
+        let destructive = Color(red: 0.78, green: 0.26, blue: 0.30)
+
+        self.workAccent = work
+        self.breakAccent = breakNeon
+        self.destructiveAccent = destructive
+
+        self.accentColor = work
+        self.accentColorLight = Color(red: 0.48, green: 0.90, blue: 1.0)
+        self.accentColorDark = Color(red: 0.0, green: 0.48, blue: 0.64)
         
-        // Dark theme background colors (app uses dark theme)
-        self.backgroundPrimary = .black
-        self.backgroundSecondary = Color(white: 0.1)
-        self.backgroundTertiary = Color(white: 0.15)
-        self.backgroundCard = Color(white: 0.12)
-        self.backgroundOverlay = Color.black.opacity(0.8)
+        // Apple-dark base: deep charcoal / cool navy (HUD canvas)
+        self.backgroundPrimary = Color(red: 0.043, green: 0.055, blue: 0.078)
+        self.backgroundSecondary = Color(red: 0.059, green: 0.071, blue: 0.094)
+        self.backgroundTertiary = Color(red: 0.078, green: 0.090, blue: 0.118)
+        self.backgroundCard = Color(red: 0.067, green: 0.078, blue: 0.102)
+        self.backgroundOverlay = Color(red: 0.02, green: 0.03, blue: 0.05).opacity(0.92)
         
-        // Text colors for dark theme
-        self.textPrimary = .white
-        self.textSecondary = Color.white.opacity(0.7)
-        self.textTertiary = Color.white.opacity(0.5)
-        self.textDisabled = Color.white.opacity(0.4)
+        self.textPrimary = Color(red: 0.92, green: 0.94, blue: 0.97)
+        self.textSecondary = Color(red: 0.62, green: 0.68, blue: 0.76)
+        self.textTertiary = Color(red: 0.42, green: 0.48, blue: 0.56)
+        self.textDisabled = Color(red: 0.32, green: 0.36, blue: 0.40)
         
-        // Border colors
-        self.borderPrimary = Color.white.opacity(0.2)
-        self.borderSecondary = Color.white.opacity(0.1)
-        self.divider = Color.white.opacity(0.15)
+        self.borderPrimary = Color.white.opacity(0.11)
+        self.borderSecondary = Color(red: 0.55, green: 0.65, blue: 0.78).opacity(0.14)
+        self.divider = Color.white.opacity(0.08)
         
-        // Button colors
         self.buttonPrimary = self.accentColor
-        self.buttonPrimaryText = .white
-        self.buttonSecondary = Color(white: 0.2)
-        self.buttonSecondaryText = .white
-        self.buttonDisabled = Color(white: 0.15)
-        self.buttonDisabledText = Color.white.opacity(0.4)
+        self.buttonPrimaryText = Color(red: 0.98, green: 0.99, blue: 1.0)
+        self.buttonSecondary = Color(red: 0.10, green: 0.12, blue: 0.16)
+        self.buttonSecondaryText = Color(red: 0.72, green: 0.76, blue: 0.82)
+        self.buttonDisabled = Color(red: 0.08, green: 0.09, blue: 0.11)
+        self.buttonDisabledText = Color(red: 0.38, green: 0.42, blue: 0.46)
         
-        // Status colors (consistent across themes)
-        self.success = .green
-        self.warning = .orange
-        self.error = .red
-        self.info = .blue
+        // Progress / break-style highlights (neon green)
+        self.success = breakNeon
+        self.warning = Color(red: 1.0, green: 0.72, blue: 0.28)
+        self.error = Color(red: 1.0, green: 0.38, blue: 0.40)
+        self.info = Color(red: 0.45, green: 0.78, blue: 1.0)
         
-        // Interactive colors
         self.interactive = self.accentColor
         self.interactivePressed = self.accentColorDark
         
-        // Shadow colors
-        self.shadowLight = Color.black.opacity(0.2)
-        self.shadowMedium = Color.black.opacity(0.3)
-        self.shadowHeavy = Color.black.opacity(0.5)
+        self.shadowLight = Color.black.opacity(0.35)
+        self.shadowMedium = Color.black.opacity(0.45)
+        self.shadowHeavy = Color.black.opacity(0.60)
     }
     
     /// Get a color with opacity applied
@@ -225,6 +209,8 @@ struct AppSettings {
     static let defaultSnapIncrement: Double = 1.0  // 1-minute increments for precise control
     static let defaultMinMinutes: Double = 0.0
     static let defaultMaxMinutes: Double = 60.0  // 1 full rotation (60 minutes)
+    /// Default daily focus target (2 h) when unset.
+    static let defaultDailyFocusGoalMinutes: Int = 120
 }
 
 // MARK: - Pomodoro Session Data Models
@@ -320,6 +306,9 @@ struct PomodoroSession: Codable, Identifiable {
     var events: [SessionEvent]
     let wasAutoStarted: Bool
     var categoryId: UUID?
+    
+    /// Minimum focused work minutes before a work session is kept (history, stats, widgets).
+    static let minimumRecordedWorkMinutes: Double = 15
     
     /// Computed actual duration in minutes (nil if session hasn't ended)
     var actualDurationMinutes: Double? {

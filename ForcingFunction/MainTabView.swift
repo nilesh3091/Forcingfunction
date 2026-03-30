@@ -74,7 +74,14 @@ struct MainTabView: View {
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 4)
-            .background(theme.background(.secondary).opacity(0.95))
+            .background(
+                theme.background(.secondary)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(theme.borderPrimary.opacity(0.55))
+                            .frame(height: 0.5)
+                    }
+            )
         }
         .preferredColorScheme(.dark)
         .accentColor(viewModel.accentColor)
@@ -102,9 +109,10 @@ private struct TabBarButton: View {
         } label: {
             VStack(spacing: 2) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .tracking(0.3)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)

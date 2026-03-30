@@ -13,6 +13,29 @@ struct SettingsView: View {
     // Helper array for pomodoro minutes
     private let pomodoroMinutesOptions: [Double] = [0, 15, 30, 45, 60]
     
+    /// 30-minute slots: 0 = off … 48 = 24 h (`slot * 30` minutes).
+    private var dailyGoalSlotBinding: Binding<Int> {
+        Binding(
+            get: {
+                min(48, viewModel.dailyFocusGoalMinutes / 30)
+            },
+            set: { slot in
+                viewModel.dailyFocusGoalMinutes = min(48, max(0, slot)) * 30
+            }
+        )
+    }
+    
+    private func formatHalfHourSlotLabel(_ slot: Int) -> String {
+        // slot 0…48 → minutes 0…1440
+        let minutes = slot * 30
+        if minutes == 0 { return "Off" }
+        let h = minutes / 60
+        let m = minutes % 60
+        if m == 0 { return h == 1 ? "1 h" : "\(h) h" }
+        if h == 0 { return "\(m)m" }
+        return "\(h)h \(m)m"
+    }
+    
     private var theme: AppTheme {
         viewModel.theme
     }
@@ -95,6 +118,29 @@ struct SettingsView: View {
                     }
                     .listRowBackground(theme.background(.card))
                     
+                    Section(header: Text("Focus goal").foregroundColor(theme.text(.secondary))) {
+                        Text("How long you want to focus each day. The main timer and home widget use this as today’s target.")
+                            .font(.footnote)
+                            .foregroundColor(theme.text(.secondary))
+                        
+                        HStack {
+                            Text("Daily target")
+                                .foregroundColor(theme.text(.primary))
+                            Spacer()
+                            Picker("", selection: dailyGoalSlotBinding) {
+                                ForEach(0...48, id: \.self) { slot in
+                                    Text(formatHalfHourSlotLabel(slot)).tag(slot)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .foregroundColor(theme.accentColor)
+                            .onChange(of: viewModel.dailyFocusGoalMinutes) { _, _ in
+                                WidgetDataManager.shared.updateWidgetData()
+                            }
+                        }
+                    }
+                    .listRowBackground(theme.background(.card))
+                    
                     Section(header: Text("Dial Settings").foregroundColor(theme.text(.secondary))) {
                         // Snap increment
                         HStack {
@@ -145,29 +191,6 @@ struct SettingsView: View {
                                 // End any active Live Activity when disabled
                                 LiveActivityManager.shared.endActivity()
                             }
-                        }
-                    }
-                    .listRowBackground(theme.background(.card))
-                    
-                    Section(header: Text("Appearance").foregroundColor(theme.text(.secondary))) {
-                        // Theme color
-                        HStack {
-                            Text("Theme Color")
-                                .foregroundColor(theme.text(.primary))
-                            Spacer()
-                            Picker("", selection: $viewModel.themeColorString) {
-                                ForEach(ThemeColor.allCases, id: \.self) { color in
-                                    HStack {
-                                        Circle()
-                                            .fill(color.theme.accentColor)
-                                            .frame(width: 16, height: 16)
-                                        Text(color.rawValue)
-                                    }
-                                    .tag(color.rawValue)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .foregroundColor(theme.accentColor)
                         }
                     }
                     .listRowBackground(theme.background(.card))
