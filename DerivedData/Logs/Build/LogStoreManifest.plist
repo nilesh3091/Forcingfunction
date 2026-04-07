@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>logFormatVersion</key>
+	<integer>12</integer>
+	<key>logs</key>
+	<dict>
+		<key>303E2179-9C9E-49E8-BA8C-D50C01193F03</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>303E2179-9C9E-49E8-BA8C-D50C01193F03.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>1</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>ForcingFunction project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>ForcingFunction</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project ForcingFunction with scheme ForcingFunction and configuration Debug</string>
+			<key>timeStartedRecording</key>
+			<real>797189166.77749205</real>
+			<key>timeStoppedRecording</key>
+			<real>797189355.36542499</real>
+			<key>title</key>
+			<string>Building project ForcingFunction with scheme ForcingFunction and configuration Debug</string>
+			<key>uniqueIdentifier</key>
+			<string>303E2179-9C9E-49E8-BA8C-D50C01193F03</string>
+		</dict>
+		<key>FBA5670A-50CA-40AC-9EB7-1A8C1F7159D8</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>FBA5670A-50CA-40AC-9EB7-1A8C1F7159D8.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>6</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>ForcingFunction project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>ForcingFunction</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project ForcingFunction with scheme ForcingFunction and configuration Debug</string>
+			<key>timeStartedRecording</key>
+			<real>797188887.29079902</real>
+			<key>timeStoppedRecording</key>
+			<real>797189086.54407096</real>
+			<key>title</key>
+			<string>Building project ForcingFunction with scheme ForcingFunction and configuration Debug</string>
+			<key>uniqueIdentifier</key>
+			<string>FBA5670A-50CA-40AC-9EB7-1A8C1F7159D8</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

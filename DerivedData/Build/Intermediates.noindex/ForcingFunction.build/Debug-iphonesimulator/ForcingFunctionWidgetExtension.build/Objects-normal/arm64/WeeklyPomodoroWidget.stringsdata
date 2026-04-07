@@ -1,0 +1,48 @@
+{
+  "source": "/Users/niles/Library/Mobile Documents/com~apple~CloudDocs/Projects/ForcingFunction/ForcingFunctionWidget/WeeklyPomodoroWidget.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Weekly Pomodoro",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 30
+        }
+      },
+      {
+        "comment": "",
+        "key": "See today’s progress toward your daily focus goal and your week at a glance.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 31
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 211
+        }
+      },
+      {
+        "comment": "",
+        "key": "Daily goal: %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 230
+        }
+      },
+      {
+        "comment": "",
+        "key": "This week: %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 234
+        }
+      }
+    ]
+  },
+  "version": 1
+}

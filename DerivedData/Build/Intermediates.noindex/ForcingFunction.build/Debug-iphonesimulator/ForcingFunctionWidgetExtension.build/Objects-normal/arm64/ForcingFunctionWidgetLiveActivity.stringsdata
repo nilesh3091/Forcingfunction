@@ -1,0 +1,40 @@
+{
+  "source": "/Users/niles/Library/Mobile Documents/com~apple~CloudDocs/Projects/ForcingFunction/ForcingFunctionWidget/ForcingFunctionWidgetLiveActivity.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Running",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 137
+        }
+      },
+      {
+        "comment": "",
+        "key": "Paused",
+        "location": {
+          "startingColumn": 78,
+          "startingLine": 137
+        }
+      },
+      {
+        "comment": "",
+        "key": "Running",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 163
+        }
+      },
+      {
+        "comment": "",
+        "key": "Paused",
+        "location": {
+          "startingColumn": 82,
+          "startingLine": 163
+        }
+      }
+    ]
+  },
+  "version": 1
+}

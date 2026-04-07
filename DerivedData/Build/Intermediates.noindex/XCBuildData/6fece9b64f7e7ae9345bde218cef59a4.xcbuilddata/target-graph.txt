@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'ForcingFunction' in project 'ForcingFunction'
+➜ Explicit dependency on target 'ForcingFunctionWidgetExtension' in project 'ForcingFunction'
+Target 'ForcingFunctionWidgetExtension' in project 'ForcingFunction' (no dependencies)
