@@ -89,41 +89,24 @@ struct DayTimelineView: View {
             GeometryReader { geo in
                 let timelineWidth = max(0, geo.size.width - leftGutterWidth - 20)
                 let innerWidth = max(0, geo.size.width - 40)
+                let totalScrollHeight = topPadding + hourHeight * 24 + bottomPadding
 
                 ScrollViewReader { scrollProxy in
                     ScrollView(.vertical, showsIndicators: true) {
-                        ZStack(alignment: .topLeading) {
-                            timelineGrid
-                            timelineBlocks(timelineWidth: timelineWidth)
-                            currentTimeLineLayer(timelineInnerWidth: innerWidth)
-
-                            if calendar.isDateInToday(selectedDate) {
-                                Color.clear
-                                    .frame(width: 1, height: 1)
-                                    .id(Self.timelineScrollNowId)
-                                    .offset(x: 0, y: yOffset(for: Date()))
-                                    .accessibilityHidden(true)
-                            }
-                        }
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: topPadding + hourHeight * 24 + bottomPadding,
-                            alignment: .topLeading
+                        timelineScrollableContent(
+                            totalScrollHeight: totalScrollHeight,
+                            timelineWidth: timelineWidth,
+                            innerWidth: innerWidth
                         )
                         .padding(.leading, 20)
                         .padding(.trailing, 20)
                     }
                     .onAppear {
-                        scrollToNowIfToday(using: scrollProxy, animated: false)
-                        DispatchQueue.main.async {
-                            scrollToNowIfToday(using: scrollProxy, animated: true)
-                        }
+                        scheduleScrollToNow(using: scrollProxy)
                     }
                     .onChange(of: selectedDate) { _, newDate in
                         if calendar.isDateInToday(newDate) {
-                            DispatchQueue.main.async {
-                                scrollToNowIfToday(using: scrollProxy, animated: true)
-                            }
+                            scheduleScrollToNow(using: scrollProxy)
                         }
                     }
                 }
@@ -141,6 +124,55 @@ struct DayTimelineView: View {
             }
         } else {
             proxy.scrollTo(Self.timelineScrollNowId, anchor: anchor)
+        }
+    }
+
+    /// Scroll after layout is ready (tab switch / `NavigationView` often scrolls too early).
+    private func scheduleScrollToNow(using proxy: ScrollViewProxy) {
+        guard calendar.isDateInToday(selectedDate) else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            scrollToNowIfToday(using: proxy, animated: false)
+            try? await Task.sleep(for: .milliseconds(120))
+            scrollToNowIfToday(using: proxy, animated: false)
+            try? await Task.sleep(for: .milliseconds(150))
+            scrollToNowIfToday(using: proxy, animated: true)
+        }
+    }
+
+    @ViewBuilder
+    private func timelineScrollableContent(
+        totalScrollHeight: CGFloat,
+        timelineWidth: CGFloat,
+        innerWidth: CGFloat
+    ) -> some View {
+        if calendar.isDateInToday(selectedDate) {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: yOffset(for: Date()))
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .id(Self.timelineScrollNowId)
+                    .accessibilityHidden(true)
+                Color.clear.frame(height: max(1, totalScrollHeight - yOffset(for: Date()) - 1))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .allowsHitTesting(false)
+            .overlay(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
+                    timelineGrid
+                    timelineBlocks(timelineWidth: timelineWidth)
+                    currentTimeLineLayer(timelineInnerWidth: innerWidth)
+                }
+                .frame(maxWidth: .infinity, minHeight: totalScrollHeight, alignment: .topLeading)
+                .allowsHitTesting(true)
+            }
+        } else {
+            ZStack(alignment: .topLeading) {
+                timelineGrid
+                timelineBlocks(timelineWidth: timelineWidth)
+                currentTimeLineLayer(timelineInnerWidth: innerWidth)
+            }
+            .frame(maxWidth: .infinity, minHeight: totalScrollHeight, alignment: .topLeading)
         }
     }
 
