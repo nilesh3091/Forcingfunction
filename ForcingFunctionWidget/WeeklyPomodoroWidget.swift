@@ -312,24 +312,3 @@ struct WeeklyPomodoroWidgetEntryView: View {
     }
 }
 
-#Preview(as: .systemMedium) {
-    WeeklyPomodoroWidget()
-} timeline: {
-    WeeklyPomodoroEntry(
-        date: Date(),
-        currentWeekTotalMinutes: 125,
-        todayFocusMinutes: 45,
-        dailyFocusGoalMinutes: 120,
-        dailyTotals: [30, 45, 0, 50, 0, 0, 0],
-        accentColor: "Cyan"
-    )
-    WeeklyPomodoroEntry(
-        date: Date(),
-        currentWeekTotalMinutes: 0,
-        todayFocusMinutes: 0,
-        dailyFocusGoalMinutes: 120,
-        dailyTotals: [0, 0, 0, 0, 0, 0, 0],
-        accentColor: "Cyan"
-    )
-}
-

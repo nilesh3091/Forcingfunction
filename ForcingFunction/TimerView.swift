@@ -323,22 +323,24 @@ struct TimerView: View {
                         .stroke(theme.borderPrimary.opacity(0.55), lineWidth: 1)
                         .frame(width: dialSize, height: dialSize)
                     
-                    // Swept accent fill: **idle only** (selected duration wedge). While running, % is the green ring only.
+                    // Swept accent: selected arc when idle; during running/paused it shrinks with remaining time.
                     let pieAngle: Double = {
                         if viewModel.timerState == .idle {
                             let currentTotalAngle = isDragging ? cumulativeDragAngle : viewModel.currentAngle
-                            return min(currentTotalAngle, 360.0)
-                        } else {
-                            return 0
+                            return min(max(0, currentTotalAngle), 360.0)
                         }
+                        // Shrinks from the full selected arc down to 0 as progress increases.
+                        return min(max(0, viewModel.elapsedAngle), 360.0)
                     }()
+                    let sweepSessionActive = viewModel.timerState == .running || viewModel.timerState == .paused
                     
                     if pieAngle > 0 {
-                        // Full opacity solid color for swept area
                         SweptAreaView(
                             totalAngle: pieAngle,
                             dialSize: dialSize,
-                            color: viewModel.sessionAccentColor
+                            color: viewModel.sessionAccentColor,
+                            opacityScale: sweepSessionActive ? 0.88 : 1.0,
+                            addDepthShadow: sweepSessionActive
                         )
                     }
                     
@@ -362,37 +364,11 @@ struct TimerView: View {
                             .trim(from: 0, to: ringTrim)
                             .stroke(
                                 viewModel.sessionAccentColor,
-                                style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round)
                             )
                             .frame(width: dialSize, height: dialSize)
                             .rotationEffect(.degrees(-90))
                             .animation(.linear(duration: 1.0), value: viewModel.progress)
-                    }
-
-                    // Progress head: circular endcap with percent
-                    if viewModel.timerState == .running || viewModel.timerState == .paused {
-                        let angle = viewModel.progress * 360.0 - 90.0
-                        let r = (dialSize / 2)
-                        let x = (dialSize / 2) + (CGFloat(cos(angle * .pi / 180.0)) * r)
-                        let y = (dialSize / 2) + (CGFloat(sin(angle * .pi / 180.0)) * r)
-                        let pctA11y = Int((viewModel.progress * 100).rounded())
-                        let headSize: CGFloat = 22
-
-                        ZStack {
-                            Circle()
-                                .fill(viewModel.sessionAccentColor)
-
-                            Color.clear
-                                .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
-                                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                .foregroundColor(Color.white.opacity(0.92))
-                                .monospacedDigit()
-                        }
-                        .frame(width: headSize, height: headSize)
-                        .position(x: x, y: y)
-                        .animation(.linear(duration: 1.0), value: viewModel.progress)
-                        .allowsHitTesting(false)
-                        .accessibilityLabel("Progress \(pctA11y) percent")
                     }
 
                     // Hand/needle
@@ -437,6 +413,23 @@ struct TimerView: View {
                         )
                         .scaleEffect(isDragging ? 1.04 : 1.0)
                         .animation(.spring(response: 0.2, dampingFraction: 0.65), value: isDragging)
+
+                    // Session progress percent: below dial center (not on the ring)
+                    if viewModel.timerState == .running || viewModel.timerState == .paused {
+                        let pctA11y = Int((viewModel.progress * 100).rounded())
+                        let lineHeight: CGFloat = 22
+                        let belowKnobOffset = (knobSize - 2) / 2 + 8 + lineHeight / 2
+
+                        Color.clear
+                            .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
+                            .font(.system(size: 18, weight: .medium, design: .monospaced))
+                            .foregroundColor(theme.text(.primary))
+                            .monospacedDigit()
+                            .offset(y: belowKnobOffset)
+                            .animation(.linear(duration: 1.0), value: viewModel.progress)
+                            .allowsHitTesting(false)
+                            .accessibilityLabel("Progress \(pctA11y) percent")
+                    }
                     }
                     .frame(width: dialSize, height: dialSize)
                 .gesture(
@@ -577,7 +570,8 @@ struct TimerView: View {
                         // End button
                         Button(action: {
                             if viewModel.hapticsEnabled {
-                                HapticManager.playSelection()
+                                // Make "End" feel decisive (closer to the dial's major tick impact).
+                                HapticManager.playImpact(style: .heavy)
                             }
                             viewModel.resetTimer()
                         }) {
@@ -601,9 +595,11 @@ struct TimerView: View {
                         Button(action: {
                             if viewModel.hapticsEnabled {
                                 if viewModel.timerState == .running {
-                                    HapticManager.playImpact(style: .light)
+                                    // Pause should feel clearly intentional.
+                                    HapticManager.playImpact(style: .heavy)
                                 } else {
-                                    HapticManager.playImpact(style: .medium)
+                                    // Resume: same strength as pause for consistency.
+                                    HapticManager.playImpact(style: .heavy)
                                 }
                             }
                             if viewModel.timerState == .running {
@@ -631,7 +627,8 @@ struct TimerView: View {
                         // Start button (full width when idle)
                         Button(action: {
                             if viewModel.hapticsEnabled {
-                                HapticManager.playImpact(style: .medium)
+                                // Start: stronger than medium so it doesn't feel "mild".
+                                HapticManager.playImpact(style: .heavy)
                             }
                             // Commit dial drag before starting so `selectedMinutes` matches what the user sees
                             // (avoids taps before DragGesture.onEnded updates the view model).
@@ -681,16 +678,35 @@ struct SweptAreaView: View {
     let totalAngle: Double  // Angle from 0-360° (0-60 minutes)
     let dialSize: CGFloat
     let color: Color
-    
+    /// Tapers fill when session is active so the progress ring stays primary.
+    let opacityScale: Double
+    /// Subtle shadow for depth (session running/paused); keeps HUD flat elsewhere.
+    let addDepthShadow: Bool
+
+    init(
+        totalAngle: Double,
+        dialSize: CGFloat,
+        color: Color,
+        opacityScale: Double = 1.0,
+        addDepthShadow: Bool = false
+    ) {
+        self.totalAngle = totalAngle
+        self.dialSize = dialSize
+        self.color = color
+        self.opacityScale = opacityScale
+        self.addDepthShadow = addDepthShadow
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             let radius = min(geometry.size.width, geometry.size.height) / 2
+            let s = min(1.2, max(0.4, opacityScale))
 
             let fillGradient = RadialGradient(
                 gradient: Gradient(colors: [
-                    color.opacity(0.42),
-                    color.opacity(0.30)
+                    color.opacity(0.42 * s),
+                    color.opacity(0.30 * s)
                 ]),
                 center: .center,
                 startRadius: 0,
@@ -709,7 +725,7 @@ struct SweptAreaView: View {
                         .frame(width: dialSize, height: dialSize)
                         .overlay(
                             Circle()
-                                .stroke(color.opacity(0.35), lineWidth: 1)
+                                .stroke(color.opacity(0.35 * s), lineWidth: 1)
                         )
                 } else {
                     Path { path in
@@ -736,12 +752,18 @@ struct SweptAreaView: View {
                             )
                             path.closeSubpath()
                         }
-                        .stroke(color.opacity(0.35), lineWidth: 1)
+                        .stroke(color.opacity(0.35 * s), lineWidth: 1)
                     )
                 }
             }
         }
         .frame(width: dialSize, height: dialSize)
+        .shadow(
+            color: addDepthShadow ? color.opacity(0.22) : .clear,
+            radius: addDepthShadow ? 10 : 0,
+            x: 0,
+            y: addDepthShadow ? 4 : 0
+        )
     }
 }
 

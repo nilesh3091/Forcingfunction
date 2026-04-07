@@ -223,9 +223,3 @@ extension ForcingFunctionWidgetAttributes.ContentState {
      }
 }
 
-#Preview("Notification", as: .content, using: ForcingFunctionWidgetAttributes.preview) {
-   ForcingFunctionWidgetLiveActivity()
-} contentStates: {
-    ForcingFunctionWidgetAttributes.ContentState.running
-    ForcingFunctionWidgetAttributes.ContentState.paused
-}

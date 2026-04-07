@@ -18,25 +18,23 @@ struct MainTabView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Swipeable pages
-            TabView(selection: $selectedTab) {
-                // Timer Tab
-                TimerView(viewModel: viewModel)
-                    .tag(0)
-                
-                // History Tab
-                CalendarView(viewModel: viewModel)
-                    .tag(1)
-                
-                // Stats Tab
-                StatsView(viewModel: viewModel)
-                    .tag(2)
-                
-                // Settings Tab
-                ProfileView(viewModel: viewModel)
-                    .tag(3)
+            // Tab content without `TabView` + `.page` — that style uses a `UIScrollView` whose
+            // default `delaysContentTouches` behavior makes buttons (e.g. Start) need extra taps.
+            Group {
+                switch selectedTab {
+                case 0:
+                    TimerView(viewModel: viewModel)
+                case 1:
+                    CalendarView(viewModel: viewModel)
+                case 2:
+                    StatsView(viewModel: viewModel)
+                case 3:
+                    ProfileView(viewModel: viewModel)
+                default:
+                    TimerView(viewModel: viewModel)
+                }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Custom bottom tab bar
             HStack {

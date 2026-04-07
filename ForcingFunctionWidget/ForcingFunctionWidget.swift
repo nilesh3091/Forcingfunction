@@ -75,10 +75,3 @@ struct ForcingFunctionWidget: Widget {
         .description("This is an example widget.")
     }
 }
-
-#Preview(as: .systemSmall) {
-    ForcingFunctionWidget()
-} timeline: {
-    SimpleEntry(date: .now, emoji: "😀")
-    SimpleEntry(date: .now, emoji: "🤩")
-}
