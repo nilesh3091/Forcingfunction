@@ -148,22 +148,6 @@ class TimerViewModel: ObservableObject {
             snapIncrement = AppSettings.defaultSnapIncrement
         }
         
-        // Single daily goal: migrate from per-weekday JSON or legacy weekly ÷ 7
-        if !hasMigratedToSingleDailyGoal {
-            var migrated = AppSettings.defaultDailyFocusGoalMinutes
-            if let json = UserDefaults.standard.string(forKey: "dailyFocusGoalMinutesByWeekdayJSON"), !json.isEmpty,
-               let data = json.data(using: .utf8),
-               let arr = try? JSONDecoder().decode([Int].self, from: data), arr.count == 7 {
-                migrated = max(0, arr.reduce(0, +) / 7)
-            } else {
-                let w = UserDefaults.standard.integer(forKey: "weeklyGoalMinutes")
-                if w > 0 { migrated = max(1, w / 7) }
-            }
-            dailyFocusGoalMinutes = min(24 * 60, max(0, migrated))
-            hasMigratedToSingleDailyGoal = true
-            WidgetDataManager.shared.updateWidgetData()
-        }
-        
         // Always start at 25 minutes
         selectedMinutes = 25.0
         remainingSeconds = Int(selectedMinutes * 60)

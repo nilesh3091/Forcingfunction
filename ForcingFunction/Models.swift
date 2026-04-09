@@ -225,8 +225,6 @@ struct AppSettings {
     static let defaultSnapIncrement: Double = 1.0  // 1-minute increments for precise control
     static let defaultMinMinutes: Double = 0.0
     static let defaultMaxMinutes: Double = 240.0  // 4 full rotations (4 hours)
-    /// Default daily focus target (2 h) when unset.
-    static let defaultDailyFocusGoalMinutes: Int = 120
 }
 
 // MARK: - Pomodoro Session Data Models
