@@ -509,8 +509,8 @@ struct TimerView: View {
                                 // Update cumulative angle
                                 cumulativeDragAngle += angleDelta
                                 
-                                // Hard limit at 360° (60 minutes) - prevent going beyond
-                                let maxAngle = 360.0  // Hard limit: 1 full rotation = 60 minutes
+                                // Hard limit at max minutes - prevent going beyond
+                                let maxAngle = (viewModel.maxMinutes / 60.0) * 360.0
                                 cumulativeDragAngle = max(0, min(maxAngle, cumulativeDragAngle))
                                 
                                 // Update visual angle for display (modulo 360 for visual rotation)

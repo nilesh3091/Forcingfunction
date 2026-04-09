@@ -11,7 +11,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: TimerViewModel
     
     // Helper array for pomodoro minutes
-    private let pomodoroMinutesOptions: [Double] = [0, 15, 30, 45, 60]
+    private let pomodoroMinutesOptions: [Double] = [0, 15, 30, 45, 60, 90, 120, 180, 240]
     
     private var theme: AppTheme {
         viewModel.theme
