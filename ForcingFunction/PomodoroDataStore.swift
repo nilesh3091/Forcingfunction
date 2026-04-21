@@ -42,6 +42,8 @@ class PomodoroDataStore {
             let beforeCount = sessions.count
             sessions.removeAll { session in
                 guard session.sessionType == .work, session.status == .cancelled else { return false }
+                // Keep short cancelled sessions if the user intentionally set a short timer
+                guard session.plannedDurationMinutes > PomodoroSession.minimumRecordedWorkMinutes else { return false }
                 let minutes = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
                 return minutes < PomodoroSession.minimumRecordedWorkMinutes
             }
@@ -92,7 +94,9 @@ class PomodoroDataStore {
         }
     }
     
-    /// Persists a session after it has ended. Completed work sessions are always kept; cancelled work under `minimumRecordedWorkMinutes` is removed.
+    /// Persists a session after it has ended. Completed work sessions are always kept; cancelled work under
+    /// `minimumRecordedWorkMinutes` is removed *unless* the user intentionally picked a short planned timer
+    /// (planned ≤ `minimumRecordedWorkMinutes`), in which case it is kept so short timers appear in history.
     func finalizeEndedSession(_ session: PomodoroSession) {
         guard session.sessionType == .work else {
             updateSession(session)
@@ -103,6 +107,10 @@ class PomodoroDataStore {
             return
         }
         if session.status == .completed {
+            updateSession(session)
+            return
+        }
+        if session.plannedDurationMinutes <= PomodoroSession.minimumRecordedWorkMinutes {
             updateSession(session)
             return
         }

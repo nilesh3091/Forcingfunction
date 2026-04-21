@@ -20,6 +20,16 @@ class TimerViewModel: ObservableObject {
     @Published var completedPomodoros: Int = 0
     @Published var totalFocusMinutes: Int = 0
     
+    // MARK: - Per-session metadata ("Setup")
+    @AppStorage("setupPomodoroTitle") var setupTitle: String = ""
+    @AppStorage("setupPomodoroTag") var setupTag: String = ""
+    @AppStorage("setupPomodoroTagColor") private var setupTagColorRaw: String = CategoryColor.teal.rawValue
+    
+    var setupTagColor: CategoryColor {
+        get { CategoryColor(rawValue: setupTagColorRaw) ?? .teal }
+        set { setupTagColorRaw = newValue.rawValue }
+    }
+    
     // MARK: - Settings (using @AppStorage)
     @AppStorage("pomodoroMinutes") var pomodoroMinutes: Double = AppSettings.defaultPomodoroMinutes
     @AppStorage("shortBreakMinutes") var shortBreakMinutes: Double = AppSettings.defaultShortBreakMinutes
@@ -158,12 +168,9 @@ class TimerViewModel: ObservableObject {
             WidgetDataManager.shared.updateWidgetData()
         }
         
-        // Migrate maxMinutes if it was set to old 120-minute value
-        if maxMinutes > 60.0 {
-            // This will be handled by the computed property, but ensure selectedMinutes doesn't exceed 60
-            if selectedMinutes > 60.0 {
-                selectedMinutes = 60.0
-            }
+        // Ensure selectedMinutes doesn't exceed the current supported dial range.
+        if selectedMinutes > maxMinutes {
+            selectedMinutes = maxMinutes
         }
         
         // Always start at 25 minutes
@@ -283,6 +290,8 @@ class TimerViewModel: ObservableObject {
             
             // Create new session
             let sessionCategoryId: UUID? = nil
+            let cleanTitle = setupTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanTag = setupTag.trimmingCharacters(in: .whitespacesAndNewlines)
             let newSession = PomodoroSession(
                 sessionType: currentSessionType,
                 startTime: now,
@@ -290,7 +299,10 @@ class TimerViewModel: ObservableObject {
                 status: .running,
                 events: [SessionEvent(timestamp: now, eventType: .started)],
                 wasAutoStarted: isAutoStartingNext,
-                categoryId: sessionCategoryId
+                categoryId: sessionCategoryId,
+                title: cleanTitle.isEmpty ? nil : cleanTitle,
+                tag: cleanTag.isEmpty ? nil : cleanTag,
+                tagColor: (cleanTag.isEmpty ? nil : setupTagColor)
             )
             currentSession = newSession
             dataStore.addSession(newSession)
@@ -782,7 +794,10 @@ class TimerViewModel: ObservableObject {
                     status: timerState == .running ? .running : .paused,
                     events: [SessionEvent(timestamp: startTime, eventType: .started)],
                     wasAutoStarted: false,
-                    categoryId: sessionCategoryId
+                    categoryId: sessionCategoryId,
+                    title: nil,
+                    tag: nil,
+                    tagColor: nil
                 )
                 currentSession = newSession
                 dataStore.addSession(newSession)
@@ -906,7 +921,8 @@ class TimerViewModel: ObservableObject {
         
         // Calculate remaining time
         let now = Date()
-        var elapsed = now.timeIntervalSince(startTime!)
+        guard let start = startTime else { return }
+        var elapsed = now.timeIntervalSince(start)
         elapsed -= pausedDuration
         
         if let pauseStart = pauseStartTime {

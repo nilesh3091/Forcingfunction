@@ -16,6 +16,7 @@ struct TimerView: View {
     @State private var dragRemainingSeconds: Int = 0  // For smooth display during drag
     @State private var cumulativeDragAngle: Double = 0  // Track cumulative angle for continuous rotation
     @State private var lastDragAngle: Double = 0  // Track previous angle to detect wraparound
+    @State private var isSetupPresented: Bool = false
     
     // Haptic feedback tracking
     @State private var lastHapticMinute: Int = -1  // Track last minute for haptic feedback
@@ -271,14 +272,7 @@ struct TimerView: View {
             ZStack {
                 theme.background(.primary)
                     .ignoresSafeArea()
-                
-                HUDGridBackground(lineColor: theme.borderSecondary.opacity(0.45), spacing: 26, lineWidth: 0.5)
-                    .ignoresSafeArea()
-                
-                HUDEdgeVignette(color: theme.background(.primary))
-                    .opacity(0.4)
-                    .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     // Mission-control status strip (monospace labels)
                     VStack(alignment: .leading, spacing: 10) {
@@ -292,7 +286,7 @@ struct TimerView: View {
                                 Text("\(Int(focusGoalProgress * 100))% OF DAILY GOAL")
                             }
                         }
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
                         .tracking(0.6)
                         .foregroundColor(theme.text(.tertiary))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -422,7 +416,7 @@ struct TimerView: View {
 
                         Color.clear
                             .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
-                            .font(.system(size: 18, weight: .medium, design: .monospaced))
+                            .font(.system(size: 18, weight: .medium, design: .rounded))
                             .foregroundColor(theme.text(.primary))
                             .monospacedDigit()
                             .offset(y: belowKnobOffset)
@@ -478,8 +472,8 @@ struct TimerView: View {
                                 // Update cumulative angle
                                 cumulativeDragAngle += angleDelta
                                 
-                                // Hard limit at 360° (60 minutes) - prevent going beyond
-                                let maxAngle = 360.0  // Hard limit: 1 full rotation = 60 minutes
+                                // Hard limit at maxMinutes (supports multiple rotations: 60 minutes = 360°)
+                                let maxAngle = (viewModel.maxMinutes / 60.0) * 360.0
                                 cumulativeDragAngle = max(0, min(maxAngle, cumulativeDragAngle))
                                 
                                 // Update visual angle for display (modulo 360 for visual rotation)
@@ -553,7 +547,7 @@ struct TimerView: View {
                         : AngleUtilities.formatTimeMinutesOnly(displaySeconds)  // Show MM:00 when idle
                     
                     Text(timeText)
-                        .font(.system(size: 44, weight: .medium, design: .monospaced))
+                        .font(.system(size: 44, weight: .medium, design: .rounded))
                         .foregroundColor(viewModel.sessionAccentColor)
                         .monospacedDigit()
                         .tracking(2)
@@ -576,7 +570,7 @@ struct TimerView: View {
                             viewModel.resetTimer()
                         }) {
                             Text("End")
-                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
                                 .tracking(0.4)
                                 .foregroundColor(theme.destructiveAccent)
                                 .frame(maxWidth: .infinity)
@@ -609,7 +603,7 @@ struct TimerView: View {
                             }
                         }) {
                             Text(viewModel.timerState == .running ? "Pause" : "Resume")
-                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
                                 .tracking(0.4)
                                 .foregroundColor(pauseResumeOutlineColor)
                                 .frame(maxWidth: .infinity)
@@ -624,6 +618,56 @@ struct TimerView: View {
                         .accessibilityLabel(viewModel.timerState == .running ? "Pause timer" : "Resume timer")
                             .buttonStyle(PressableButtonStyle())
                     } else {
+                        // Setup button row
+                        HStack {
+                            Button {
+                                isSetupPresented = true
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "slider.horizontal.3")
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text("Setup")
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .tracking(0.4)
+                                }
+                                .foregroundColor(theme.text(.secondary))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(theme.background(.secondary))
+                                .cornerRadius(10)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(theme.borderPrimary.opacity(0.7), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(viewModel.timerState != .idle)
+                            
+                            Spacer()
+                            
+                            // Small chip showing current setup (if any)
+                            let title = viewModel.setupTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let tag = viewModel.setupTag.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !title.isEmpty || !tag.isEmpty {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    if !title.isEmpty {
+                                        Text(title)
+                                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                                            .foregroundColor(theme.text(.primary))
+                                            .lineLimit(1)
+                                    }
+                                    if !tag.isEmpty {
+                                        Text(tag)
+                                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                                            .foregroundColor(viewModel.setupTagColor.color)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+                        
                         // Start button (full width when idle)
                         Button(action: {
                             if viewModel.hapticsEnabled {
@@ -644,7 +688,7 @@ struct TimerView: View {
                             viewModel.startTimer()
                         }) {
                             Text("Start")
-                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                .font(.system(size: 15, weight: .semibold, design: .rounded))
                                 .tracking(0.8)
                                 .foregroundColor(theme.breakAccent)
                                 .frame(maxWidth: .infinity)
@@ -664,16 +708,19 @@ struct TimerView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .fontDesign(.rounded)
         // Note: Completion alert removed - timer now resets to idle state automatically
         .onAppear {
             viewModel.updateSettings()
             viewModel.syncTimerState()
         }
+        .sheet(isPresented: $isSetupPresented) {
+            PomodoroSetupSheet(viewModel: viewModel)
+        }
     }
 }
 
-// Helper view to draw swept area (pie slice) for single rotation (0-60 minutes)
+// Helper view to draw swept area (pie slice) for a single rotation (0-60 minutes)
 struct SweptAreaView: View {
     let totalAngle: Double  // Angle from 0-360° (0-60 minutes)
     let dialSize: CGFloat

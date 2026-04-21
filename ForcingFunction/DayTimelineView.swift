@@ -184,7 +184,7 @@ struct DayTimelineView: View {
                     .foregroundColor(theme.text(.primary))
 
                 Text(dayTitle)
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
                     .tracking(0.4)
                     .foregroundColor(theme.text(.secondary))
             }
@@ -195,7 +195,7 @@ struct DayTimelineView: View {
                 selectedDate = Date()
             } label: {
                 Text("Today")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .tracking(0.4)
                     .foregroundColor(theme.text(.primary))
                     .padding(.horizontal, 10)
@@ -230,7 +230,7 @@ struct DayTimelineView: View {
             ForEach(0..<24, id: \.self) { hour in
                 HStack(alignment: .top, spacing: 0) {
                     Text(hourLabel(hour))
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundColor(theme.text(.tertiary))
                         .frame(width: leftGutterWidth, height: hourHeight, alignment: .topTrailing)
                         .padding(.trailing, 10)
@@ -272,7 +272,7 @@ struct DayTimelineView: View {
             HStack(spacing: 0) {
                 Spacer().frame(width: leftGutterWidth + 10)
                 Text("No sessions")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundColor(theme.text(.tertiary, opacity: 0.75))
                     .padding(.top, topPadding + 10)
                 Spacer()
@@ -370,13 +370,13 @@ private struct DayTimelineBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .tracking(0.3)
                 .foregroundColor(theme.text(.primary))
                 .lineLimit(1)
 
             Text(timeRange)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .rounded))
                 .foregroundColor(theme.text(.secondary))
                 .lineLimit(1)
         }

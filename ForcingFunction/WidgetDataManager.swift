@@ -78,9 +78,10 @@ class WidgetDataManager {
         let weekSessions = dataStore.getSessions(from: startOfWeek, to: endOfWeekEndOfDay)
         let completedWorkSessions = weekSessions.filter { $0.sessionType == .work && $0.status == .completed }
         
-        // Calculate total for the week
+        // Calculate total for the week. Fall back to actualDurationMinutes if active isn't available
+        // (keeps widget totals aligned with in-app stats, which use the same fallback chain).
         let totalMinutes = completedWorkSessions.compactMap { session -> Double? in
-            return session.activeDurationMinutes
+            return session.activeDurationMinutes ?? session.actualDurationMinutes
         }.reduce(0, +)
         let currentWeekTotalMinutes = Int(totalMinutes)
         
@@ -101,7 +102,7 @@ class WidgetDataManager {
         #endif
         
         for session in completedWorkSessions {
-            guard let activeMinutes = session.activeDurationMinutes else { continue }
+            guard let activeMinutes = session.activeDurationMinutes ?? session.actualDurationMinutes else { continue }
             let sessionDate = session.startTime
             
             // Validate session is within the week range (safety check)

@@ -692,9 +692,10 @@ struct PomodoroSessionCard: View {
     }
     
     private var statusColor: Color {
+        let base = session.tagColor?.color ?? accentColor
         switch session.status {
         case .completed:
-            return accentColor
+            return base
         case .cancelled:
             return isPartialCancelledIncomplete ? .orange : .gray
         case .paused, .running:
@@ -731,7 +732,7 @@ struct PomodoroSessionCard: View {
             // Session Details
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Work")
+                    Text(session.title?.isEmpty == false ? session.title! : "Work")
                         .font(.headline)
                         .foregroundColor(.white)
                     
@@ -745,6 +746,13 @@ struct PomodoroSessionCard: View {
                         .padding(.vertical, 4)
                         .background(statusColor.opacity(0.2))
                         .cornerRadius(8)
+                }
+                
+                if let tag = session.tag, !tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(tag)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor((session.tagColor?.color ?? accentColor).opacity(0.95))
+                        .lineLimit(1)
                 }
                 
                 HStack(spacing: 12) {

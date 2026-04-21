@@ -223,7 +223,7 @@ struct SettingsView: View {
                     .listRowBackground(theme.background(.card))
                 }
                 .scrollContentBackground(.hidden)
-                .preferredColorScheme(.dark)
+                .fontDesign(.rounded)
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)

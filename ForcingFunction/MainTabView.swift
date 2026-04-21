@@ -81,7 +81,7 @@ struct MainTabView: View {
                     }
             )
         }
-        .preferredColorScheme(.dark)
+        .fontDesign(.rounded)
         .accentColor(viewModel.accentColor)
         .onOpenURL { url in
             // Handle widget tap - open Stats tab
@@ -109,7 +109,7 @@ private struct TabBarButton: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 17, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .tracking(0.3)
             }
             .frame(maxWidth: .infinity)
