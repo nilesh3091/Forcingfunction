@@ -19,12 +19,17 @@ class TimerViewModel: ObservableObject {
     @Published var currentSessionType: SessionType = .work
     @Published var completedPomodoros: Int = 0
     @Published var totalFocusMinutes: Int = 0
+    @Published var healthWorkouts: [HealthWorkoutSession] = []
     
     // MARK: - Per-session metadata ("Setup")
     @AppStorage("setupPomodoroTitle") var setupTitle: String = ""
     @AppStorage("setupPomodoroTag") var setupTag: String = ""
     @AppStorage("setupPomodoroTagColor") private var setupTagColorRaw: String = CategoryColor.teal.rawValue
-    
+    /// UUID string of the selected project (empty = none).
+    @AppStorage("setupProjectId") var setupProjectId: String = ""
+    /// UUID string of the selected project tag (empty = none).
+    @AppStorage("setupTagId") var setupTagId: String = ""
+
     var setupTagColor: CategoryColor {
         get { CategoryColor(rawValue: setupTagColorRaw) ?? .teal }
         set { setupTagColorRaw = newValue.rawValue }
@@ -43,6 +48,7 @@ class TimerViewModel: ObservableObject {
     @AppStorage("liveActivitiesEnabled") var liveActivitiesEnabled: Bool = true
     @AppStorage("dailyFocusGoalMinutes") var dailyFocusGoalMinutes: Int = AppSettings.defaultDailyFocusGoalMinutes
     @AppStorage("hasMigratedToSingleDailyGoal") private var hasMigratedToSingleDailyGoal: Bool = false
+    @AppStorage("appAppearance") private var appAppearanceRaw: String = AppAppearance.system.rawValue
     
     // MARK: - Timer State Persistence (using @AppStorage)
     @AppStorage("savedTimerState") private var savedTimerStateRaw: String = ""
@@ -74,6 +80,11 @@ class TimerViewModel: ObservableObject {
     /// Centralized theme system - use this for all styling
     var theme: AppTheme {
         AppTheme.standard
+    }
+    
+    var appAppearance: AppAppearance {
+        get { AppAppearance(rawValue: appAppearanceRaw) ?? .system }
+        set { appAppearanceRaw = newValue.rawValue }
     }
     
     /// Global accent (work / cyan) — tabs, settings, calendar, stats.
@@ -216,6 +227,27 @@ class TimerViewModel: ObservableObject {
         // IMPORTANT: This runs AFTER restoreTimerState() and completeExpiredSessions() 
         // so expired sessions can be completed first
         dataStore.cleanupOrphanedSessions()
+        
+        Task { @MainActor in
+            await refreshHealthWorkouts()
+        }
+    }
+
+    @MainActor
+    func refreshHealthWorkouts() async {
+        // Pull enough history to populate the History strip (up to ~60 days) and month view.
+        let calendar = Calendar.current
+        let now = Date()
+        let start = calendar.date(byAdding: .day, value: -90, to: now) ?? now.addingTimeInterval(-90 * 24 * 60 * 60)
+        
+        let ok = await HealthKitManager.shared.requestWorkoutReadAuthorization()
+        guard ok else {
+            healthWorkouts = []
+            return
+        }
+        
+        let workouts = await HealthKitManager.shared.fetchWorkouts(from: start, to: now)
+        healthWorkouts = workouts
     }
     
     /// Keeps the device from auto-locking while a session is active (running or paused).
@@ -302,7 +334,9 @@ class TimerViewModel: ObservableObject {
                 categoryId: sessionCategoryId,
                 title: cleanTitle.isEmpty ? nil : cleanTitle,
                 tag: cleanTag.isEmpty ? nil : cleanTag,
-                tagColor: (cleanTag.isEmpty ? nil : setupTagColor)
+                tagColor: (cleanTag.isEmpty ? nil : setupTagColor),
+                projectId: UUID(uuidString: setupProjectId),
+                projectTagId: UUID(uuidString: setupTagId)
             )
             currentSession = newSession
             dataStore.addSession(newSession)
@@ -579,9 +613,13 @@ class TimerViewModel: ObservableObject {
     func setTimeFromMinutes(_ minutes: Double) {
         let clamped = max(minMinutes, min(maxMinutes, minutes))
         if timerState == .idle {
+            let oldWhole = Int(selectedMinutes.rounded())
             selectedMinutes = clamped
             remainingSeconds = Int(selectedMinutes * 60)
             pausedSeconds = remainingSeconds
+            if hapticsEnabled && Int(clamped.rounded()) != oldWhole {
+                HapticManager.playSelection()
+            }
         }
     }
     

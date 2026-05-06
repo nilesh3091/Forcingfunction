@@ -10,7 +10,6 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var viewModel: TimerViewModel
     
-    // Helper array for pomodoro minutes
     private let pomodoroMinutesOptions: [Double] = [0, 15, 30, 45, 60]
     
     /// 30-minute slots: 0 = off … 48 = 24 h (`slot * 30` minutes).
@@ -26,7 +25,6 @@ struct SettingsView: View {
     }
     
     private func formatHalfHourSlotLabel(_ slot: Int) -> String {
-        // slot 0…48 → minutes 0…1440
         let minutes = slot * 30
         if minutes == 0 { return "Off" }
         let h = minutes / 60
@@ -36,22 +34,44 @@ struct SettingsView: View {
         return "\(h)h \(m)m"
     }
     
-    private var theme: AppTheme {
-        viewModel.theme
-    }
-    
     var body: some View {
-        NavigationView {
-            ZStack {
-                theme.background(.primary)
-                    .ignoresSafeArea()
+        ZStack {
+            HC.bg.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                pageHeader
+                
+                Rectangle()
+                    .fill(HC.line)
+                    .frame(height: 1)
                 
                 Form {
-                    Section(header: Text("Session Durations").foregroundColor(theme.text(.secondary))) {
-                        // Pomodoro length
+                    Section(header: sectionHeader("Appearance")) {
+                        HStack {
+                            Text("Mode")
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { viewModel.appAppearance },
+                                set: { viewModel.appAppearance = $0 }
+                            )) {
+                                ForEach(AppAppearance.allCases) { mode in
+                                    Text(mode.displayName).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .foregroundStyle(HC.red)
+                        }
+                    }
+                    .listRowBackground(HC.card)
+                    .listRowSeparatorTint(HC.line)
+                    
+                    Section(header: sectionHeader("Session Durations")) {
                         HStack {
                             Text("Pomodoro Length")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Picker("", selection: $viewModel.pomodoroMinutes) {
                                 ForEach(pomodoroMinutesOptions, id: \.self) { minutes in
@@ -59,16 +79,16 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(theme.accentColor)
+                            .foregroundStyle(HC.red)
                             .onChange(of: viewModel.pomodoroMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
                         }
                         
-                        // Short break length
                         HStack {
                             Text("Short Break")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Picker("", selection: $viewModel.shortBreakMinutes) {
                                 ForEach(1...30, id: \.self) { minutes in
@@ -76,16 +96,16 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(theme.accentColor)
+                            .foregroundStyle(HC.red)
                             .onChange(of: viewModel.shortBreakMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
                         }
                         
-                        // Long break length
                         HStack {
                             Text("Long Break")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Picker("", selection: $viewModel.longBreakMinutes) {
                                 ForEach(5...60, id: \.self) { minutes in
@@ -93,19 +113,20 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(theme.accentColor)
+                            .foregroundStyle(HC.red)
                             .onChange(of: viewModel.longBreakMinutes) { _, _ in
                                 viewModel.updateSettings()
                             }
                         }
                     }
-                    .listRowBackground(theme.background(.card))
+                    .listRowBackground(HC.card)
+                    .listRowSeparatorTint(HC.line)
                     
-                    Section(header: Text("Pomodoro Cycle").foregroundColor(theme.text(.secondary))) {
-                        // Pomodoros before long break
+                    Section(header: sectionHeader("Pomodoro Cycle")) {
                         HStack {
                             Text("Pomodoros Before Long Break")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Picker("", selection: $viewModel.pomodorosBeforeLongBreak) {
                                 ForEach(1...10, id: \.self) { count in
@@ -113,19 +134,21 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(theme.accentColor)
+                            .foregroundStyle(HC.red)
                         }
                     }
-                    .listRowBackground(theme.background(.card))
+                    .listRowBackground(HC.card)
+                    .listRowSeparatorTint(HC.line)
                     
-                    Section(header: Text("Focus goal").foregroundColor(theme.text(.secondary))) {
-                        Text("How long you want to focus each day. The main timer and home widget use this as today’s target.")
-                            .font(.footnote)
-                            .foregroundColor(theme.text(.secondary))
+                    Section(header: sectionHeader("Focus Goal")) {
+                        Text("How long you want to focus each day. The main timer and home widget use this as today's target.")
+                            .font(HC.text(13))
+                            .foregroundStyle(HC.muted)
                         
                         HStack {
                             Text("Daily target")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Picker("", selection: dailyGoalSlotBinding) {
                                 ForEach(0...48, id: \.self) { slot in
@@ -133,19 +156,20 @@ struct SettingsView: View {
                                 }
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(theme.accentColor)
+                            .foregroundStyle(HC.red)
                             .onChange(of: viewModel.dailyFocusGoalMinutes) { _, _ in
                                 WidgetDataManager.shared.updateWidgetData()
                             }
                         }
                     }
-                    .listRowBackground(theme.background(.card))
+                    .listRowBackground(HC.card)
+                    .listRowSeparatorTint(HC.line)
                     
-                    Section(header: Text("Dial Settings").foregroundColor(theme.text(.secondary))) {
-                        // Snap increment
+                    Section(header: sectionHeader("Dial Settings")) {
                         HStack {
                             Text("Snap Increment")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Picker("", selection: $viewModel.snapIncrement) {
                                 Text("1 minute").tag(1.0)
@@ -153,63 +177,68 @@ struct SettingsView: View {
                                 Text("15 minutes").tag(15.0)
                             }
                             .pickerStyle(.menu)
-                            .foregroundColor(theme.accentColor)
+                            .foregroundStyle(HC.red)
                         }
                     }
-                    .listRowBackground(theme.background(.card))
+                    .listRowBackground(HC.card)
+                    .listRowSeparatorTint(HC.line)
                     
-                    Section(header: Text("Behavior").foregroundColor(theme.text(.secondary))) {
-                        // Auto-start next session
+                    Section(header: sectionHeader("Behavior")) {
                         Toggle(isOn: $viewModel.autoStartNext) {
                             Text("Auto-start Next Session")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                         }
-                        .tint(theme.accentColor)
+                        .tint(HC.red)
                         
-                        // Play sound on completion
                         Toggle(isOn: $viewModel.playSoundOnCompletion) {
                             Text("Play Sound on Completion")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                         }
-                        .tint(theme.accentColor)
+                        .tint(HC.red)
                         
-                        // Haptics
                         Toggle(isOn: $viewModel.hapticsEnabled) {
                             Text("Haptic Feedback")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                         }
-                        .tint(theme.accentColor)
+                        .tint(HC.red)
                         
-                        // Live Activities
                         Toggle(isOn: $viewModel.liveActivitiesEnabled) {
                             Text("Live Activities")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                         }
-                        .tint(theme.accentColor)
+                        .tint(HC.red)
                         .onChange(of: viewModel.liveActivitiesEnabled) { oldValue, newValue in
                             if !newValue {
-                                // End any active Live Activity when disabled
                                 LiveActivityManager.shared.endActivity()
                             }
                         }
                     }
-                    .listRowBackground(theme.background(.card))
+                    .listRowBackground(HC.card)
+                    .listRowSeparatorTint(HC.line)
                     
-                    Section(header: Text("Statistics").foregroundColor(theme.text(.secondary))) {
+                    Section(header: sectionHeader("Statistics")) {
                         HStack {
                             Text("Total Focus Time")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Text(AngleUtilities.formatFocusTime(viewModel.totalFocusMinutes))
-                                .foregroundColor(theme.accentColor)
+                                .font(HC.text(16, weight: .semibold))
+                                .foregroundStyle(HC.red)
                         }
                         
                         HStack {
                             Text("Completed Pomodoros")
-                                .foregroundColor(theme.text(.primary))
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.ink)
                             Spacer()
                             Text("\(viewModel.completedPomodoros)")
-                                .foregroundColor(theme.accentColor)
+                                .font(HC.text(16, weight: .semibold))
+                                .foregroundStyle(HC.red)
                         }
                         
                         Button(action: {
@@ -217,21 +246,43 @@ struct SettingsView: View {
                             viewModel.completedPomodoros = 0
                         }) {
                             Text("Reset Statistics")
-                                .foregroundColor(theme.error)
+                                .font(HC.text(16))
+                                .foregroundStyle(HC.red)
                         }
                     }
-                    .listRowBackground(theme.background(.card))
+                    .listRowBackground(HC.card)
+                    .listRowSeparatorTint(HC.line)
                 }
                 .scrollContentBackground(.hidden)
-                .fontDesign(.rounded)
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.large)
         }
+    }
+    
+    private var pageHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("APP")
+                    .hcMonoLabel()
+                Text("Settings")
+                    .font(HC.display(28))
+                    .foregroundStyle(HC.ink)
+                    .tracking(-0.5)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, HC.pagePaddingH)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+    }
+    
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(HC.mono(10, weight: .medium))
+            .tracking(1.2)
+            .foregroundStyle(HC.muted)
     }
 }
 
 #Preview {
     SettingsView(viewModel: TimerViewModel())
 }
-

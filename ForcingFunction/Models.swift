@@ -22,6 +22,31 @@ enum SessionType: String, CaseIterable, Codable {
 
 // MARK: - App Theme System
 
+/// App-level appearance override.
+enum AppAppearance: String, CaseIterable, Codable, Identifiable {
+    case system
+    case light
+    case dark
+    
+    var id: String { rawValue }
+    
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+    
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 /// Centralized theme system for app-wide styling
 /// All colors used throughout the app should come from this struct
 struct AppTheme {
@@ -334,6 +359,10 @@ struct PomodoroSession: Codable, Identifiable {
     var title: String?
     var tag: String?
     var tagColor: CategoryColor?
+
+    /// Project association — optional so existing sessions decode without breakage.
+    var projectId: UUID?
+    var projectTagId: UUID?
     
     /// Cancelled (incomplete) work sessions under this many focused minutes are discarded (history/stats).
     static let minimumRecordedWorkMinutes: Double = 15
@@ -381,7 +410,9 @@ struct PomodoroSession: Codable, Identifiable {
         categoryId: UUID? = nil,
         title: String? = nil,
         tag: String? = nil,
-        tagColor: CategoryColor? = nil
+        tagColor: CategoryColor? = nil,
+        projectId: UUID? = nil,
+        projectTagId: UUID? = nil
     ) {
         self.id = id
         self.sessionType = sessionType
@@ -395,6 +426,69 @@ struct PomodoroSession: Codable, Identifiable {
         self.title = title
         self.tag = tag
         self.tagColor = tagColor
+        self.projectId = projectId
+        self.projectTagId = projectTagId
+    }
+}
+
+// MARK: - Project Models
+
+/// A tag that belongs to a project. Two-level nesting: parentId == nil → top-level; otherwise sub-tag.
+struct ProjectTag: Codable, Identifiable {
+    let id: UUID
+    var name: String
+    var parentId: UUID?
+    let createdDate: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        parentId: UUID? = nil,
+        createdDate: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.parentId = parentId
+        self.createdDate = createdDate
+    }
+}
+
+/// A named mastery project that accumulates focus hours toward a goal (default 10,000 h).
+struct Project: Codable, Identifiable {
+    let id: UUID
+    var name: String
+    var color: CategoryColor
+    var goalHours: Double
+    var tags: [ProjectTag]
+    let createdDate: Date
+    var isArchived: Bool
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        color: CategoryColor,
+        goalHours: Double = 10_000,
+        tags: [ProjectTag] = [],
+        createdDate: Date = Date(),
+        isArchived: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.goalHours = goalHours
+        self.tags = tags
+        self.createdDate = createdDate
+        self.isArchived = isArchived
+    }
+
+    /// All top-level tags (no parent).
+    var topLevelTags: [ProjectTag] {
+        tags.filter { $0.parentId == nil }.sorted { $0.createdDate < $1.createdDate }
+    }
+
+    /// Sub-tags of a given parent tag.
+    func subTags(of parentId: UUID) -> [ProjectTag] {
+        tags.filter { $0.parentId == parentId }.sorted { $0.createdDate < $1.createdDate }
     }
 }
 

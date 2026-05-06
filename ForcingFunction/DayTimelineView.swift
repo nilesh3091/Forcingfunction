@@ -2,9 +2,12 @@ import SwiftUI
 
 /// Google-Calendar-style single-day timeline with session blocks positioned by start/end time.
 struct DayTimelineView: View {
-    let theme: AppTheme
     let sessions: [PomodoroSession]
+    let workouts: [HealthWorkoutSession]
     @Binding var selectedDate: Date
+    var refreshAction: (() -> Void)? = nil
+
+    private static let breakColor = Color(red: 0.20, green: 0.58, blue: 0.40)
 
     private let calendar = Calendar.current
     /// Anchor for `ScrollViewReader` — must match `.id` on the invisible marker.
@@ -41,34 +44,51 @@ struct DayTimelineView: View {
         return topPadding + CGFloat(minutes) * pixelsPerMinute
     }
 
-    private func blockColor(for session: PomodoroSession) -> Color {
-        switch session.sessionType {
-        case .work:
-            return theme.workAccent
-        case .shortBreak, .longBreak:
-            return theme.breakAccent
+    private func blockColor(for item: TimelineItem) -> Color {
+        switch item.kind {
+        case .focus:
+            return item.session.map { s in
+                switch s.sessionType {
+                case .work: return HC.red
+                case .shortBreak, .longBreak: return Self.breakColor
+                }
+            } ?? HC.red
+        case .workout:
+            return Self.breakColor
         }
     }
 
-    private func blockOpacity(for session: PomodoroSession) -> Double {
-        switch session.status {
-        case .completed:
-            return 0.92
-        case .running, .paused:
-            return 0.95
-        case .cancelled:
-            return 0.35
+    private func blockOpacity(for item: TimelineItem) -> Double {
+        switch item.kind {
+        case .workout:
+            return 0.85
+        case .focus:
+            guard let s = item.session else { return 0.92 }
+            switch s.status {
+            case .completed:
+                return 0.92
+            case .running, .paused:
+                return 0.95
+            case .cancelled:
+                return 0.35
+            }
         }
     }
 
-    private func blockBorderColor(for session: PomodoroSession) -> Color {
-        switch session.status {
-        case .completed:
-            return theme.borderPrimary.opacity(0.45)
-        case .running, .paused:
-            return Color.white.opacity(0.65)
-        case .cancelled:
-            return Color.white.opacity(0.25)
+    private func blockBorderColor(for item: TimelineItem) -> Color {
+        switch item.kind {
+        case .workout:
+            return Self.breakColor.opacity(0.4)
+        case .focus:
+            guard let s = item.session else { return HC.line }
+            switch s.status {
+            case .completed:
+                return HC.line
+            case .running, .paused:
+                return HC.red.opacity(0.6)
+            case .cancelled:
+                return HC.line.opacity(0.35)
+            }
         }
     }
 
@@ -83,7 +103,7 @@ struct DayTimelineView: View {
             header
 
             Divider()
-                .overlay(theme.divider)
+                .overlay(HC.line)
                 .padding(.horizontal, 20)
 
             GeometryReader { geo in
@@ -112,7 +132,7 @@ struct DayTimelineView: View {
                 }
             }
         }
-        .background(theme.background(.primary).ignoresSafeArea())
+        .background(HC.bg.ignoresSafeArea())
     }
 
     private func scrollToNowIfToday(using proxy: ScrollViewProxy, animated: Bool) {
@@ -180,32 +200,41 @@ struct DayTimelineView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Timeline")
-                    .font(.system(size: 24, weight: .semibold, design: .rounded))
-                    .foregroundColor(theme.text(.primary))
+                    .font(HC.display(24))
+                    .foregroundStyle(HC.ink)
 
                 Text(dayTitle)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(HC.text(13))
                     .tracking(0.4)
-                    .foregroundColor(theme.text(.secondary))
+                    .foregroundStyle(HC.muted)
             }
 
             Spacer()
+
+            if let refresh = refreshAction {
+                Button(action: refresh) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(HC.text(14, weight: .semibold))
+                        .foregroundStyle(HC.red)
+                }
+                .buttonStyle(.plain)
+            }
 
             Button {
                 selectedDate = Date()
             } label: {
                 Text("Today")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(HC.text(12, weight: .semibold))
                     .tracking(0.4)
-                    .foregroundColor(theme.text(.primary))
+                    .foregroundStyle(HC.ink)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(theme.background(.secondary))
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(HC.card)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(theme.borderPrimary.opacity(0.55), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(HC.line, lineWidth: 1)
                             )
                     )
             }
@@ -218,7 +247,7 @@ struct DayTimelineView: View {
             )
             .labelsHidden()
             .datePickerStyle(.compact)
-            .tint(theme.accentColor)
+            .tint(HC.red)
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
@@ -230,8 +259,8 @@ struct DayTimelineView: View {
             ForEach(0..<24, id: \.self) { hour in
                 HStack(alignment: .top, spacing: 0) {
                     Text(hourLabel(hour))
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor(theme.text(.tertiary))
+                        .font(HC.text(11, weight: .medium))
+                        .foregroundStyle(HC.muted)
                         .frame(width: leftGutterWidth, height: hourHeight, alignment: .topTrailing)
                         .padding(.trailing, 10)
                         .padding(.top, 2)
@@ -242,8 +271,8 @@ struct DayTimelineView: View {
                                 Rectangle()
                                     .fill(
                                         quarter == 0
-                                            ? theme.borderSecondary.opacity(0.5)
-                                            : theme.borderSecondary.opacity(0.28)
+                                            ? HC.line.opacity(0.5)
+                                            : HC.line.opacity(0.28)
                                     )
                                     .frame(height: 0.5)
                                 Spacer()
@@ -263,7 +292,7 @@ struct DayTimelineView: View {
     @ViewBuilder
     private func timelineBlocks(timelineWidth: CGFloat) -> some View {
         let blocks = DayTimelineBlock.makeBlocks(
-            sessions: sessions,
+            items: TimelineItem.makeItems(sessions: sessions, workouts: workouts),
             dayStart: dayRange.start,
             dayEnd: dayRange.end
         )
@@ -272,8 +301,8 @@ struct DayTimelineView: View {
             HStack(spacing: 0) {
                 Spacer().frame(width: leftGutterWidth + 10)
                 Text("No sessions")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundColor(theme.text(.tertiary, opacity: 0.75))
+                    .font(HC.text(12, weight: .medium))
+                    .foregroundStyle(HC.muted.opacity(0.75))
                     .padding(.top, topPadding + 10)
                 Spacer()
             }
@@ -283,7 +312,6 @@ struct DayTimelineView: View {
             ForEach(laidOut) { item in
                 let y = yOffset(for: item.start)
                 let endY = yOffset(for: item.end)
-                // Strict duration on the timeline (no artificial minimum height).
                 let height = max(1, endY - y)
 
                 let usableWidth = max(0, timelineWidth - 10)
@@ -293,13 +321,12 @@ struct DayTimelineView: View {
                 let x = leftGutterWidth + 10 + CGFloat(item.column) * (width + columnGap)
 
                 DayTimelineBlockView(
-                    theme: theme,
-                    title: item.session.sessionType.displayName,
+                    title: item.title,
                     timeRange: timeRangeText(start: item.start, end: item.end),
-                    color: blockColor(for: item.session),
-                    fillOpacity: blockOpacity(for: item.session),
-                    borderColor: blockBorderColor(for: item.session),
-                    isCancelled: item.session.status == .cancelled
+                    color: blockColor(for: item.item),
+                    fillOpacity: blockOpacity(for: item.item),
+                    borderColor: blockBorderColor(for: item.item),
+                    isCancelled: item.isCancelled
                 )
                 .frame(width: max(0, width), height: height, alignment: .topLeading)
                 .clipped()
@@ -309,13 +336,12 @@ struct DayTimelineView: View {
     }
 
     private func hourLabel(_ hour: Int) -> String {
-        // Google-ish: 12am, 1am, 12pm...
         let isPM = hour >= 12
         let h = hour % 12 == 0 ? 12 : hour % 12
         return "\(h)\(isPM ? "pm" : "am")"
     }
 
-    /// Horizontal “now” line; live-updating when viewing today.
+    /// Horizontal "now" line; live-updating when viewing today.
     @ViewBuilder
     private func currentTimeLineLayer(timelineInnerWidth: CGFloat) -> some View {
         if calendar.isDateInToday(selectedDate) {
@@ -327,17 +353,17 @@ struct DayTimelineView: View {
                     if y >= topPadding - 2, y <= dayEndY + 2 {
                         ZStack(alignment: .topLeading) {
                             Rectangle()
-                                .fill(theme.warning)
+                                .fill(HC.red)
                                 .frame(width: max(0, timelineInnerWidth), height: 2)
-                                .shadow(color: theme.warning.opacity(0.45), radius: 4, y: 1)
+                                .shadow(color: HC.red.opacity(0.45), radius: 4, y: 1)
                                 .offset(x: 0, y: y - 1)
 
                             Circle()
-                                .fill(theme.warning)
+                                .fill(HC.red)
                                 .frame(width: 7, height: 7)
                                 .overlay(
                                     Circle()
-                                        .stroke(theme.text(.primary).opacity(0.35), lineWidth: 1)
+                                        .stroke(HC.ink.opacity(0.35), lineWidth: 1)
                                 )
                                 .offset(x: leftGutterWidth - 2, y: y - 3.5)
                         }
@@ -359,7 +385,6 @@ struct DayTimelineView: View {
 }
 
 private struct DayTimelineBlockView: View {
-    let theme: AppTheme
     let title: String
     let timeRange: String
     let color: Color
@@ -370,14 +395,14 @@ private struct DayTimelineBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(HC.text(12, weight: .semibold))
                 .tracking(0.3)
-                .foregroundColor(theme.text(.primary))
+                .foregroundStyle(HC.ink)
                 .lineLimit(1)
 
             Text(timeRange)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(theme.text(.secondary))
+                .font(HC.text(11))
+                .foregroundStyle(HC.muted)
                 .lineLimit(1)
         }
         .padding(.horizontal, 8)
@@ -399,20 +424,20 @@ private struct DayTimelineBlockView: View {
 
 struct DayTimelineBlock: Identifiable {
     let id: UUID
-    let session: PomodoroSession
+    let item: TimelineItem
     let start: Date
     let end: Date
 
-    static func makeBlocks(sessions: [PomodoroSession], dayStart: Date, dayEnd: Date) -> [DayTimelineBlock] {
-        sessions.compactMap { s in
-            let rawStart = s.startTime
-            let rawEnd = s.endTime ?? Date()
+    static func makeBlocks(items: [TimelineItem], dayStart: Date, dayEnd: Date) -> [DayTimelineBlock] {
+        items.compactMap { i in
+            let rawStart = i.start
+            let rawEnd = i.end
 
             let start = max(dayStart, min(dayEnd, rawStart))
             let end = max(dayStart, min(dayEnd, rawEnd))
 
             guard end > start else { return nil }
-            return DayTimelineBlock(id: s.id, session: s, start: start, end: end)
+            return DayTimelineBlock(id: i.id, item: i, start: start, end: end)
         }
         .sorted { $0.start < $1.start }
     }
@@ -420,11 +445,14 @@ struct DayTimelineBlock: Identifiable {
 
 struct DayTimelineLayoutItem: Identifiable {
     let id: UUID
-    let session: PomodoroSession
+    let item: TimelineItem
     let start: Date
     let end: Date
     let column: Int
     let columnCount: Int
+    
+    var title: String { item.title }
+    var isCancelled: Bool { item.isCancelled }
 }
 
 enum DayTimelineLayout {
@@ -432,7 +460,6 @@ enum DayTimelineLayout {
     static func layout(blocks: [DayTimelineBlock]) -> [DayTimelineLayoutItem] {
         guard !blocks.isEmpty else { return [] }
 
-        // 1) Build overlap groups (connected components by time overlap).
         var groups: [[DayTimelineBlock]] = []
         var current: [DayTimelineBlock] = []
         var currentMaxEnd: Date?
@@ -455,18 +482,15 @@ enum DayTimelineLayout {
         }
         if !current.isEmpty { groups.append(current) }
 
-        // 2) For each group, assign columns via greedy sweep.
         var out: [DayTimelineLayoutItem] = []
         out.reserveCapacity(blocks.count)
 
         for group in groups {
-            // Active columns: (endTime, columnIndex)
             var active: [(Date, Int)] = []
             var nextColumn = 0
             var assigned: [(DayTimelineBlock, Int)] = []
 
             for b in group.sorted(by: { $0.start < $1.start }) {
-                // release finished
                 active.removeAll { (end, _) in end <= b.start }
 
                 let used = Set(active.map { $0.1 })
@@ -478,14 +502,13 @@ enum DayTimelineLayout {
                 assigned.append((b, col))
             }
 
-            // Column count for the entire overlap component.
             let columnCount = max(1, nextColumn)
 
             for (b, col) in assigned {
                 out.append(
                     DayTimelineLayoutItem(
                         id: b.id,
-                        session: b.session,
+                        item: b.item,
                         start: b.start,
                         end: b.end,
                         column: col,
@@ -499,3 +522,47 @@ enum DayTimelineLayout {
     }
 }
 
+// MARK: - Timeline model (focus + workouts)
+
+struct TimelineItem: Identifiable {
+    enum Kind {
+        case focus
+        case workout
+    }
+    
+    let id: UUID
+    let kind: Kind
+    let start: Date
+    let end: Date
+    let title: String
+    let isCancelled: Bool
+    let session: PomodoroSession?
+    
+    static func makeItems(sessions: [PomodoroSession], workouts: [HealthWorkoutSession]) -> [TimelineItem] {
+        let focus: [TimelineItem] = sessions.map { s in
+            TimelineItem(
+                id: s.id,
+                kind: .focus,
+                start: s.startTime,
+                end: s.endTime ?? Date(),
+                title: s.sessionType.displayName,
+                isCancelled: s.status == .cancelled,
+                session: s
+            )
+        }
+        
+        let w: [TimelineItem] = workouts.map { wk in
+            TimelineItem(
+                id: wk.id,
+                kind: .workout,
+                start: wk.startDate,
+                end: wk.endDate,
+                title: wk.activityName,
+                isCancelled: false,
+                session: nil
+            )
+        }
+        
+        return (focus + w).sorted { $0.start < $1.start }
+    }
+}

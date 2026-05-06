@@ -11,11 +11,7 @@ struct MainTabView: View {
     @StateObject private var viewModel = TimerViewModel()
     @State private var selectedTab = 0
     @Environment(\.openURL) private var openURL
-    
-    private var theme: AppTheme {
-        viewModel.theme
-    }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Tab content without `TabView` + `.page` — that style uses a `UIScrollView` whose
@@ -35,54 +31,12 @@ struct MainTabView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Custom bottom tab bar
-            HStack {
-                TabBarButton(
-                    title: "Timer",
-                    systemImage: "clock.fill",
-                    index: 0,
-                    selectedTab: $selectedTab,
-                    theme: theme
-                )
-                
-                TabBarButton(
-                    title: "History",
-                    systemImage: "clock.arrow.circlepath",
-                    index: 1,
-                    selectedTab: $selectedTab,
-                    theme: theme
-                )
-                
-                TabBarButton(
-                    title: "Stats",
-                    systemImage: "chart.bar.fill",
-                    index: 2,
-                    selectedTab: $selectedTab,
-                    theme: theme
-                )
 
-                TabBarButton(
-                    title: "Settings",
-                    systemImage: "gearshape.fill",
-                    index: 3,
-                    selectedTab: $selectedTab,
-                    theme: theme
-                )
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 4)
-            .background(
-                theme.background(.secondary)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(theme.borderPrimary.opacity(0.55))
-                            .frame(height: 0.5)
-                    }
-            )
+            HCTabBar(selectedTab: $selectedTab)
         }
-        .fontDesign(.rounded)
-        .accentColor(viewModel.accentColor)
+        .background(HC.bg.ignoresSafeArea())
+        .accentColor(HC.red)
+        .preferredColorScheme(.light)
         .onOpenURL { url in
             // Handle widget tap - open Stats tab
             if url.scheme == "forcingfunction" && url.host == "stats" {
@@ -92,33 +46,60 @@ struct MainTabView: View {
     }
 }
 
-private struct TabBarButton: View {
-    let title: String
-    let systemImage: String
-    let index: Int
+// MARK: - Hour Cards tab bar
+
+private struct HCTabBar: View {
     @Binding var selectedTab: Int
-    let theme: AppTheme
-    
+
+    private static let items: [(glyph: String, label: String)] = [
+        ("●", "Focus"),
+        ("◍", "Log"),
+        ("◐", "Shape"),
+        ("◇", "Tune"),
+    ]
+
     var body: some View {
-        Button {
-            withAnimation(.easeInOut) {
-                selectedTab = index
+        HStack(spacing: 0) {
+            ForEach(Array(Self.items.enumerated()), id: \.offset) { index, item in
+                HCTabButton(
+                    glyph: item.glyph,
+                    label: item.label,
+                    isActive: selectedTab == index
+                ) {
+                    selectedTab = index
+                }
             }
-        } label: {
-            VStack(spacing: 2) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 17, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .tracking(0.3)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 22)
+        .background(
+            HC.bg
+                .overlay(alignment: .top) {
+                    Rectangle().fill(HC.line).frame(height: 1)
+                }
+        )
+    }
+}
+
+private struct HCTabButton: View {
+    let glyph: String
+    let label: String
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Text(glyph)
+                    .font(HC.text(18, weight: .bold))
+                    .foregroundStyle(isActive ? HC.red : HC.muted)
+                Text(label)
+                    .font(HC.text(11, weight: isActive ? .bold : .medium))
+                    .foregroundStyle(isActive ? HC.ink : HC.muted)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
-            .foregroundColor(selectedTab == index ? theme.accentColor : theme.text(.secondary))
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(selectedTab == index ? theme.accent(opacity: 0.15) : .clear)
-            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

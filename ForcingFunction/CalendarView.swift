@@ -32,7 +32,26 @@ private enum HistoryRange: String, CaseIterable, Identifiable {
 private struct SessionDayGroup: Identifiable {
     let id: Date
     let date: Date
-    let sessions: [PomodoroSession]
+    let items: [CalendarItem]
+}
+
+private enum CalendarItem: Identifiable {
+    case focus(PomodoroSession)
+    case workout(HealthWorkoutSession)
+    
+    var id: UUID {
+        switch self {
+        case .focus(let s): return s.id
+        case .workout(let w): return w.id
+        }
+    }
+    
+    var startTime: Date {
+        switch self {
+        case .focus(let s): return s.startTime
+        case .workout(let w): return w.startDate
+        }
+    }
 }
 
 struct CalendarView: View {
@@ -51,15 +70,22 @@ struct CalendarView: View {
         dataStore.getAllSessions().filter { $0.sessionType == .work }
     }
     
+    private var workouts: [HealthWorkoutSession] {
+        viewModel.healthWorkouts
+    }
+    
     // Get dates that have sessions (for calendar indicators)
     private var datesWithSessions: Set<Date> {
-        Set(workSessions.map { calendar.startOfDay(for: $0.startTime) })
+        var days = Set(workSessions.map { calendar.startOfDay(for: $0.startTime) })
+        for w in workouts {
+            days.insert(calendar.startOfDay(for: w.startDate))
+        }
+        return days
     }
     
     // Dates shown in the horizontal date strip (recent history window)
     private var dateStripDays: [Date] {
         guard let minSessionDate = workSessions.map({ $0.startTime }).min() else {
-            // No sessions yet – show just the last 7 days ending today
             let today = calendar.startOfDay(for: Date())
             let offsets = (-6)...0
             return offsets.compactMap { offset in
@@ -124,26 +150,38 @@ struct CalendarView: View {
             .sorted { $0.startTime > $1.startTime }
     }
     
+    private var filteredWorkouts: [HealthWorkoutSession] {
+        guard let range = currentDateRange else {
+            return workouts.sorted { $0.startDate > $1.startDate }
+        }
+        return workouts
+            .filter { $0.startDate >= range.start && $0.startDate <= range.end }
+            .sorted { $0.startDate > $1.startDate }
+    }
+    
     // Sessions grouped by day for list sections
     private var groupedSessions: [SessionDayGroup] {
-        let groupedDictionary: [Date: [PomodoroSession]] = Dictionary(
-            grouping: filteredSessions,
-            by: { session in
-                calendar.startOfDay(for: session.startTime)
+        let focusItems = filteredSessions.map { CalendarItem.focus($0) }
+        let workoutItems = filteredWorkouts.map { CalendarItem.workout($0) }
+        let allItems = (focusItems + workoutItems)
+            .sorted { $0.startTime > $1.startTime }
+        
+        let groupedDictionary: [Date: [CalendarItem]] = Dictionary(
+            grouping: allItems,
+            by: { item in
+                calendar.startOfDay(for: item.startTime)
             }
         )
         
         let groups: [SessionDayGroup] = groupedDictionary.map { entry in
             let date = entry.key
-            let sessionsForDate = entry.value.sorted { lhs, rhs in
+            let itemsForDate = entry.value.sorted { lhs, rhs in
                 lhs.startTime > rhs.startTime
             }
-            return SessionDayGroup(id: date, date: date, sessions: sessionsForDate)
+            return SessionDayGroup(id: date, date: date, items: itemsForDate)
         }
         
-        return groups.sorted { lhs, rhs in
-            lhs.date > rhs.date
-        }
+        return groups.sorted { $0.date > $1.date }
     }
     
     private var summaryTitle: String {
@@ -166,7 +204,7 @@ struct CalendarView: View {
     }
     
     private var summarySubtitle: String {
-        makeSummarySubtitle(for: filteredSessions)
+        makeSummarySubtitle(for: filteredSessions, workouts: filteredWorkouts)
     }
     
     // Selected date to highlight in the strip
@@ -181,29 +219,29 @@ struct CalendarView: View {
     }
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
+        ZStack {
+            HC.bg.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                pageHeader
                 
-                VStack(spacing: 0) {
-                    rangeHeader
-                    Divider()
-                        .background(Color.gray.opacity(0.3))
-                        .padding(.horizontal, 20)
-                    sessionsContent
-                }
+                Rectangle()
+                    .fill(HC.line)
+                    .frame(height: 1)
+                    .padding(.horizontal, HC.pagePaddingH)
+                
+                rangeHeader
+                
+                Rectangle()
+                    .fill(HC.line)
+                    .frame(height: 1)
+                    .padding(.horizontal, HC.pagePaddingH)
+                
+                sessionsContent
             }
-            .navigationTitle("History")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    browseButton
-                }
-            }
-            .sheet(isPresented: $isCalendarPresented) {
-                calendarSheet
-            }
+        }
+        .sheet(isPresented: $isCalendarPresented) {
+            calendarSheet
         }
     }
     
@@ -219,20 +257,25 @@ struct CalendarView: View {
         }
     }
     
-    private func makeSummarySubtitle(for sessions: [PomodoroSession]) -> String {
-        let sessionCount = sessions.count
-        guard sessionCount > 0 else {
+    private func makeSummarySubtitle(for sessions: [PomodoroSession], workouts: [HealthWorkoutSession]) -> String {
+        let focusCount = sessions.count
+        let workoutCount = workouts.count
+        guard focusCount + workoutCount > 0 else {
             return "No sessions yet"
         }
         
-        let totalMinutes = totalFocusedMinutes(for: sessions)
-        let dayStartDates = sessions.map { calendar.startOfDay(for: $0.startTime) }
+        let totalFocus = totalFocusedMinutes(for: sessions)
+        let totalWorkouts = workouts.reduce(0) { $0 + $1.durationMinutes }
+        
+        let dayStartDates = sessions.map { calendar.startOfDay(for: $0.startTime) } + workouts.map { calendar.startOfDay(for: $0.startDate) }
         let distinctDays = Set<Date>(dayStartDates).count
         let streakDays = currentStreakDays()
         
         var parts: [String] = []
-        parts.append("\(sessionCount) session\(sessionCount == 1 ? "" : "s")")
-        parts.append("\(totalMinutes) min focused")
+        if focusCount > 0 { parts.append("\(focusCount) focus") }
+        if workoutCount > 0 { parts.append("\(workoutCount) workout\(workoutCount == 1 ? "" : "s")") }
+        if focusCount > 0 { parts.append("\(totalFocus) min focused") }
+        if workoutCount > 0 { parts.append("\(totalWorkouts) min trained") }
         
         if distinctDays > 1 {
             parts.append("\(distinctDays) days active")
@@ -246,8 +289,10 @@ struct CalendarView: View {
     }
 
     private func currentStreakDays() -> Int {
-        // Streak is based on any day with at least one session, counting back from today
-        let allSessionDays: Set<Date> = Set(workSessions.map { calendar.startOfDay(for: $0.startTime) })
+        var allSessionDays: Set<Date> = Set(workSessions.map { calendar.startOfDay(for: $0.startTime) })
+        for w in workouts {
+            allSessionDays.insert(calendar.startOfDay(for: w.startDate))
+        }
         guard !allSessionDays.isEmpty else { return 0 }
         
         var streak = 0
@@ -266,6 +311,24 @@ struct CalendarView: View {
 
     // MARK: - Subviews
     
+    private var pageHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("HISTORY")
+                    .hcMonoLabel()
+                Text("Sessions")
+                    .font(HC.display(28))
+                    .foregroundStyle(HC.ink)
+                    .tracking(-0.5)
+            }
+            Spacer()
+            browseButton
+        }
+        .padding(.horizontal, HC.pagePaddingH)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+    }
+    
     private var rangeHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Range", selection: $selectedRange) {
@@ -276,7 +339,6 @@ struct CalendarView: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: selectedRange) { _ in
-                // Clear specific day selection when changing base range
                 selectedSpecificDate = nil
             }
             
@@ -284,32 +346,30 @@ struct CalendarView: View {
                 dates: dateStripDays,
                 selectedDate: stripSelectedDate,
                 datesWithSessions: datesWithSessions,
-                calendar: calendar,
-                accentColor: viewModel.accentColor
+                calendar: calendar
             ) { date in
-                // Tapping a pill focuses on that specific day
                 selectedSpecificDate = date
                 selectedRange = .today
             }
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(summaryTitle)
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    .font(HC.display(17))
+                    .foregroundStyle(HC.ink)
                 
                 Text(summarySubtitle)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(HC.text(13))
+                    .foregroundStyle(HC.muted)
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, HC.pagePaddingH)
         .padding(.top, 12)
         .padding(.bottom, 12)
     }
     
     @ViewBuilder
     private var sessionsContent: some View {
-        if filteredSessions.isEmpty {
+        if filteredSessions.isEmpty && filteredWorkouts.isEmpty {
             emptySessionsView
         } else {
             sessionsListView
@@ -320,11 +380,11 @@ struct CalendarView: View {
         VStack(spacing: 12) {
             Image(systemName: "calendar.badge.exclamationmark")
                 .font(.system(size: 48))
-                .foregroundColor(.gray.opacity(0.5))
+                .foregroundStyle(HC.muted)
             
             Text("No sessions in this range yet")
-                .font(.headline)
-                .foregroundColor(.white.opacity(0.7))
+                .font(HC.text(15))
+                .foregroundStyle(HC.muted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.top, 60)
@@ -339,41 +399,48 @@ struct CalendarView: View {
         .id(refreshTrigger)
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color.black)
+        .background(HC.bg)
     }
 
     private func sectionView(for group: SessionDayGroup) -> some View {
         Section(
             header: DayHeaderView(
                 date: group.date,
-                sessions: group.sessions,
+                sessions: group.items.compactMap { item in
+                    if case .focus(let s) = item { return s }
+                    return nil
+                },
                 calendar: calendar
             )
         ) {
-            ForEach(group.sessions) { session in
-                PomodoroSessionCard(
-                    session: session,
-                    accentColor: viewModel.accentColor
-                )
+            ForEach(group.items) { item in
+                Group {
+                    switch item {
+                    case .focus(let session):
+                        PomodoroSessionCard(session: session, accentColor: HC.red)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                if session.status == .cancelled {
+                                    Button(role: .destructive) {
+                                        deleteSession(session)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
+                    case .workout(let workout):
+                        WorkoutSessionCard(workout: workout, accentColor: HC.red)
+                    }
+                }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .listRowInsets(
                     EdgeInsets(
                         top: 0,
-                        leading: 20,
+                        leading: HC.pagePaddingH,
                         bottom: 16,
-                        trailing: 20
+                        trailing: HC.pagePaddingH
                     )
                 )
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    if session.status == .cancelled {
-                        Button(role: .destructive) {
-                            deleteSession(session)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
             }
         }
     }
@@ -386,16 +453,15 @@ struct CalendarView: View {
                 Image(systemName: "calendar")
                 Text("Browse")
             }
-            .font(.subheadline)
-            .foregroundColor(viewModel.accentColor)
+            .font(HC.text(14, weight: .medium))
+            .foregroundStyle(HC.red)
         }
     }
     
     private var calendarSheet: some View {
         NavigationView {
             ZStack {
-                Color.black
-                    .ignoresSafeArea()
+                HC.bg.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
                     CalendarGridView(
@@ -407,13 +473,12 @@ struct CalendarView: View {
                             }
                         ),
                         datesWithSessions: datesWithSessions,
-                        accentColor: viewModel.accentColor,
+                        accentColor: HC.red,
                         onDaySelected: { _ in
-                            // When a day is selected, dismiss and use that specific date
                             isCalendarPresented = false
                         }
                     )
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, HC.pagePaddingH)
                     .padding(.top, 12)
                     .padding(.bottom, 20)
                     
@@ -427,7 +492,7 @@ struct CalendarView: View {
                     Button("Close") {
                         isCalendarPresented = false
                     }
-                    .foregroundColor(.white)
+                    .foregroundStyle(HC.ink)
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
@@ -435,7 +500,7 @@ struct CalendarView: View {
                         selectedSpecificDate = nil
                         isCalendarPresented = false
                     }
-                    .foregroundColor(viewModel.accentColor)
+                    .foregroundStyle(HC.red)
                 }
             }
         }
@@ -443,8 +508,80 @@ struct CalendarView: View {
     
     private func deleteSession(_ session: PomodoroSession) {
         dataStore.deleteSession(byId: session.id)
-        // Trigger view refresh
         refreshTrigger = UUID()
+    }
+}
+
+// MARK: - Workout Card
+
+private struct WorkoutSessionCard: View {
+    let workout: HealthWorkoutSession
+    let accentColor: Color
+    
+    private var durationString: String {
+        "\(workout.durationMinutes) min"
+    }
+    
+    private var timeRangeString: String {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return "\(f.string(from: workout.startDate)) - \(f.string(from: workout.endDate))"
+    }
+    
+    private static let workoutGreen = Color(red: 0.20, green: 0.58, blue: 0.40)
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Self.workoutGreen.opacity(0.12))
+                    .frame(width: 48, height: 48)
+                
+                Image(systemName: "figure.run")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Self.workoutGreen)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(workout.activityName)
+                        .font(HC.text(15, weight: .semibold))
+                        .foregroundStyle(HC.ink)
+                    
+                    Spacer()
+                    
+                    Text("Workout")
+                        .font(HC.text(11, weight: .medium))
+                        .foregroundStyle(Self.workoutGreen)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Self.workoutGreen.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: HC.Radius.tag, style: .continuous))
+                }
+                
+                HStack(spacing: 12) {
+                    Label(durationString, systemImage: "clock.fill")
+                        .font(HC.text(13))
+                        .foregroundStyle(HC.muted)
+                    
+                    Text("•")
+                        .foregroundStyle(HC.muted.opacity(0.5))
+                    
+                    Text(timeRangeString)
+                        .font(HC.text(12))
+                        .foregroundStyle(HC.muted)
+                }
+                
+                if let source = workout.sourceName, !source.isEmpty {
+                    Text(source)
+                        .font(HC.text(11, weight: .medium))
+                        .foregroundStyle(accentColor.opacity(0.85))
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(16)
+        .hcCard(radius: HC.Radius.smallCard)
     }
 }
 
@@ -473,20 +610,15 @@ struct CalendarGridView: View {
             return []
         }
         
-        // Get first weekday of month (0 = Sunday, 1 = Monday, etc.)
         let firstWeekday = calendar.component(.weekday, from: firstDayOfMonth) - 1
-        
-        // Get number of days in month
         let daysCount = calendar.dateComponents([.day], from: firstDayOfMonth, to: lastDayOfMonth).day ?? 0
         
         var days: [Date?] = []
         
-        // Add empty cells for days before month starts
         for _ in 0..<firstWeekday {
             days.append(nil)
         }
         
-        // Add days of the month
         for dayOffset in 0...daysCount {
             if let day = calendar.date(byAdding: .day, value: dayOffset, to: firstDayOfMonth) {
                 days.append(day)
@@ -498,7 +630,6 @@ struct CalendarGridView: View {
     
     var body: some View {
         VStack(spacing: 8) {
-            // Month Navigation
             HStack {
                 Button(action: {
                     withAnimation {
@@ -508,19 +639,19 @@ struct CalendarGridView: View {
                     }
                 }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(HC.text(14, weight: .semibold))
+                        .foregroundStyle(HC.ink)
                         .frame(width: 32, height: 32)
-                        .background(Color.gray.opacity(0.2))
+                        .background(HC.card)
                         .clipShape(Circle())
+                        .overlay(Circle().strokeBorder(HC.line, lineWidth: 1))
                 }
                 
                 Spacer()
                 
                 Text(monthYearString)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .font(HC.display(17))
+                    .foregroundStyle(HC.ink)
                 
                 Spacer()
                 
@@ -532,25 +663,24 @@ struct CalendarGridView: View {
                     }
                 }) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(HC.text(14, weight: .semibold))
+                        .foregroundStyle(HC.ink)
                         .frame(width: 32, height: 32)
-                        .background(Color.gray.opacity(0.2))
+                        .background(HC.card)
                         .clipShape(Circle())
+                        .overlay(Circle().strokeBorder(HC.line, lineWidth: 1))
                 }
             }
             
-            // Weekday Headers
             HStack(spacing: 0) {
                 ForEach(weekdays, id: \.self) { weekday in
                     Text(weekday)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
+                        .font(HC.mono(10, weight: .medium))
+                        .foregroundStyle(HC.muted)
                         .frame(maxWidth: .infinity)
                 }
             }
             
-            // Calendar Days Grid
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 4) {
                 ForEach(Array(daysInMonth.enumerated()), id: \.offset) { index, date in
                     if let date = date {
@@ -571,7 +701,6 @@ struct CalendarGridView: View {
                             onDaySelected?(date)
                         }
                     } else {
-                        // Empty cell
                         Color.clear
                             .frame(height: 32)
                     }
@@ -601,11 +730,11 @@ struct CalendarDayView: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Text("\(dayNumber)")
-                    .font(.system(size: 14, weight: isSelected ? .bold : .regular))
-                    .foregroundColor(
-                        isSelected ? .white :
+                    .font(HC.text(14, weight: isSelected ? .bold : .regular))
+                    .foregroundStyle(
+                        isSelected ? Color.white :
                         isToday ? accentColor :
-                        .white.opacity(0.9)
+                        HC.ink
                     )
                 
                 if hasSessions {
@@ -638,7 +767,6 @@ struct PomodoroSessionCard: View {
     
     private let calendar = Calendar.current
     
-    /// Cancelled after some work, but before the planned duration ended.
     private var isPartialCancelledIncomplete: Bool {
         guard session.status == .cancelled, session.endTime != nil else { return false }
         let elapsed = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
@@ -654,11 +782,9 @@ struct PomodoroSessionCard: View {
             return "\(completed) / \(planned) min"
         }
         if let activeDuration = session.activeDurationMinutes {
-            let minutes = Int(activeDuration)
-            return "\(minutes) min"
+            return "\(Int(activeDuration)) min"
         } else if let actualDuration = session.actualDurationMinutes {
-            let minutes = Int(actualDuration)
-            return "\(minutes) min"
+            return "\(Int(actualDuration)) min"
         } else {
             return "\(Int(session.plannedDurationMinutes)) min"
         }
@@ -679,16 +805,8 @@ struct PomodoroSessionCard: View {
     
     private var dateString: String {
         let formatter = DateFormatter()
-        if calendar.isDateInToday(session.startTime) {
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: session.startTime)
-        } else if calendar.isDateInYesterday(session.startTime) {
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: session.startTime)
-        } else {
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: session.startTime)
-        }
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: session.startTime)
     }
     
     private var statusColor: Color {
@@ -697,7 +815,7 @@ struct PomodoroSessionCard: View {
         case .completed:
             return base
         case .cancelled:
-            return isPartialCancelledIncomplete ? .orange : .gray
+            return isPartialCancelledIncomplete ? .orange : HC.muted
         case .paused, .running:
             return .orange
         }
@@ -718,66 +836,60 @@ struct PomodoroSessionCard: View {
     
     var body: some View {
         HStack(spacing: 16) {
-            // Session Icon
             ZStack {
                 Circle()
-                    .fill(statusColor.opacity(0.2))
+                    .fill(statusColor.opacity(0.12))
                     .frame(width: 48, height: 48)
                 
                 Image(systemName: "timer")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(statusColor)
+                    .foregroundStyle(statusColor)
             }
             
-            // Session Details
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(session.title?.isEmpty == false ? session.title! : "Work")
-                        .font(.headline)
-                        .foregroundColor(.white)
+                        .font(HC.text(15, weight: .semibold))
+                        .foregroundStyle(HC.ink)
                     
                     Spacer()
                     
                     Text(statusText)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(statusColor)
+                        .font(HC.text(11, weight: .medium))
+                        .foregroundStyle(statusColor)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(statusColor.opacity(0.2))
-                        .cornerRadius(8)
+                        .background(statusColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: HC.Radius.tag, style: .continuous))
                 }
                 
                 if let tag = session.tag, !tag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(tag)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundColor((session.tagColor?.color ?? accentColor).opacity(0.95))
+                        .font(HC.text(11, weight: .medium))
+                        .foregroundStyle((session.tagColor?.color ?? accentColor).opacity(0.95))
                         .lineLimit(1)
                 }
                 
                 HStack(spacing: 12) {
                     Label(durationString, systemImage: "clock.fill")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(HC.text(13))
+                        .foregroundStyle(HC.muted)
                     
                     Text("•")
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundStyle(HC.muted.opacity(0.5))
                     
                     Text(dateString)
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(HC.text(13))
+                        .foregroundStyle(HC.muted)
                 }
                 
                 Text(timeRangeString)
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(HC.text(12))
+                    .foregroundStyle(HC.muted)
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.1))
-        )
+        .hcCard(radius: HC.Radius.smallCard)
     }
 }
 
@@ -818,16 +930,16 @@ private struct DayHeaderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.headline)
-                .foregroundColor(.white)
+                .font(HC.text(14, weight: .semibold))
+                .foregroundStyle(HC.ink)
             
             Text(subtitle)
-                .font(.caption)
-                .foregroundColor(.white.opacity(0.6))
+                .font(HC.text(12))
+                .foregroundStyle(HC.muted)
         }
-        .padding(.leading, 20)
+        .padding(.leading, HC.pagePaddingH)
         .padding(.bottom, 4)
-        .background(Color.black)
+        .background(HC.bg)
     }
 }
 
@@ -838,7 +950,6 @@ private struct DateStripView: View {
     let selectedDate: Date?
     let datesWithSessions: Set<Date>
     let calendar: Calendar
-    let accentColor: Color
     let onSelect: (Date) -> Void
     
     private var weekdayFormatter: DateFormatter {
@@ -863,8 +974,7 @@ private struct DateStripView: View {
                         isSelected: isSelected,
                         isToday: isToday,
                         hasSessions: hasSessions,
-                        isFuture: isFuture,
-                        accentColor: accentColor
+                        isFuture: isFuture
                     ) {
                         onSelect(dayStart)
                     }
@@ -882,7 +992,6 @@ private struct DatePillView: View {
     let isToday: Bool
     let hasSessions: Bool
     let isFuture: Bool
-    let accentColor: Color
     let action: () -> Void
     
     private var dayNumber: String {
@@ -898,21 +1007,21 @@ private struct DatePillView: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Text(weekdayText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(labelColor)
+                    .font(HC.mono(11, weight: .medium))
+                    .foregroundStyle(labelColor)
                 
                 ZStack {
                     Circle()
-                        .strokeBorder(borderColor, lineWidth: isSelected ? 2 : 1)
-                        .background(
-                            Circle()
-                                .fill(backgroundColor)
-                        )
+                        .fill(backgroundColor)
+                        .frame(width: 32, height: 32)
+                    
+                    Circle()
+                        .strokeBorder(borderColor, lineWidth: isSelected ? 0 : 1)
                         .frame(width: 32, height: 32)
                     
                     Text(dayNumber)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(numberColor)
+                        .font(HC.text(15, weight: .semibold))
+                        .foregroundStyle(numberColor)
                 }
             }
             .padding(.horizontal, 2)
@@ -921,49 +1030,29 @@ private struct DatePillView: View {
     }
     
     private var labelColor: Color {
-        if isSelected {
-            return .white
-        }
-        if isToday {
-            return accentColor
-        }
-        if isFuture {
-            return .white.opacity(0.3)
-        }
-        return .white.opacity(0.6)
+        if isSelected { return .white }
+        if isToday { return HC.red }
+        if isFuture { return HC.muted.opacity(0.4) }
+        return HC.muted
     }
     
     private var borderColor: Color {
-        if isSelected {
-            return .clear
-        }
-        if isToday {
-            return accentColor
-        }
-        if hasSessions {
-            return accentColor.opacity(0.6)
-        }
-        return .white.opacity(0.2)
+        if isSelected { return .clear }
+        if isToday { return HC.red }
+        if hasSessions { return HC.red.opacity(0.4) }
+        return HC.line
     }
     
     private var backgroundColor: Color {
-        if isSelected {
-            return .white
-        }
+        if isSelected { return HC.ink }
         return .clear
     }
     
     private var numberColor: Color {
-        if isSelected {
-            return .black
-        }
-        if isToday {
-            return accentColor
-        }
-        if isFuture {
-            return .white.opacity(0.3)
-        }
-        return hasSessions ? .white : .white.opacity(0.7)
+        if isSelected { return .white }
+        if isToday { return HC.red }
+        if isFuture { return HC.muted.opacity(0.4) }
+        return hasSessions ? HC.ink : HC.muted
     }
 }
 

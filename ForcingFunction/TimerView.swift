@@ -2,973 +2,598 @@
 //  TimerView.swift
 //  ForcingFunction
 //
-//  Main timer view with interactive circular dial
+//  Calendar + Timer focus screen — Variant 4 design.
+//  Left strip : scrollable 24-hour timeline. Block top = now (live).
+//               Drag the bottom edge to resize duration.
+//  Right panel: MM:SS card — drag the digits up/down to set duration (idle only).
+//               Both sides write to viewModel.selectedMinutes.
 //
 
 import SwiftUI
 import UIKit
+import Combine
 
 struct TimerView: View {
+
     @ObservedObject var viewModel: TimerViewModel
-    @State private var isDragging = false
-    @State private var dragAngle: Double = 0
-    @State private var lastSelectedMinutes: Double = 0
-    @State private var dragRemainingSeconds: Int = 0  // For smooth display during drag
-    @State private var cumulativeDragAngle: Double = 0  // Track cumulative angle for continuous rotation
-    @State private var lastDragAngle: Double = 0  // Track previous angle to detect wraparound
-    @State private var isSetupPresented: Bool = false
-    
-    // Haptic feedback tracking
-    @State private var lastHapticMinute: Int = -1  // Track last minute for haptic feedback
-    @State private var lastHapticMajorTick: Int = -1  // Track last 5-minute mark for haptic feedback
-    @State private var lastHapticTime: Date = Date()  // Throttle continuous feedback
-    
-    // Haptic feedback helper functions
-    private func triggerSelectionHaptic() {
-        let generator = UISelectionFeedbackGenerator()
-        generator.prepare()
-        generator.selectionChanged()
-    }
-    
-    private func triggerImpactHaptic() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.prepare()
-        generator.impactOccurred()
-    }
-    
-    /// Today’s target from the per-weekday schedule (Settings).
-    private func dailyGoalMinutes() -> Int {
-        viewModel.focusGoalMinutesForToday()
-    }
-    
-    /// Completed focus today plus elapsed time in the current work session (if any).
-    private func effectiveTodayFocusMinutes() -> Double {
-        var total = Double(getTodayFocusMinutes())
-        if viewModel.currentSessionType == .work,
-           viewModel.timerState == .running || viewModel.timerState == .paused {
-            let totalSeconds = max(1, Int(viewModel.selectedMinutes * 60))
-            let elapsedSeconds = totalSeconds - viewModel.remainingSeconds
-            total += Double(elapsedSeconds) / 60.0
-        }
-        return total
-    }
-    
-    /// Progress toward today’s focus goal (0…1), aligned with the “FOCUSED” line. No target → 0 progress.
-    private var focusGoalProgress: Double {
-        let goal = Double(dailyGoalMinutes())
-        if goal <= 0 { return 0 }
-        let m = effectiveTodayFocusMinutes()
-        return min(1.0, max(0.0, m / goal))
-    }
-    
-    // Calculate today's total focus time in minutes
-    private func getTodayFocusMinutes() -> Int {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
-        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0 }
-        
-        let dataStore = PomodoroDataStore.shared
-        let allSessions = dataStore.getAllSessions()
-        
-        let todaySessions = allSessions.filter { session in
-            session.sessionType == .work &&
-            session.status == .completed &&
-            session.startTime >= startOfDay &&
-            session.startTime < startOfNextDay
-        }
-        
-        var totalMinutes: Double = 0
-        for session in todaySessions {
-            if let activeDuration = session.activeDurationMinutes {
-                totalMinutes += activeDuration
-            } else if let actualDuration = session.actualDurationMinutes {
-                totalMinutes += actualDuration
-            } else if let endTime = session.endTime {
-                totalMinutes += (endTime.timeIntervalSince(session.startTime) / 60.0)
-            } else {
-                totalMinutes += session.plannedDurationMinutes
-            }
-        }
-        
-        return Int(totalMinutes)
-    }
-    
-    // Format focus time for display (e.g., "3H 32M" or "45M")
-    private func formatTodayFocusTime() -> String {
-        let totalMinutes = getTodayFocusMinutes()
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
-        
-        if hours > 0 {
-            return "\(hours)H \(minutes)M"
-        } else {
-            return "\(minutes)M"
-        }
-    }
-    
-    // Get today's completed work sessions
-    private func getTodayCompletedWorkSessions() -> [PomodoroSession] {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
-        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
-        
-        let dataStore = PomodoroDataStore.shared
-        let allSessions = dataStore.getAllSessions()
-        
-        return allSessions.filter { session in
-            // Only completed work sessions
-            session.sessionType == .work &&
-            session.status == .completed &&
-            // Started today
-            session.startTime >= startOfDay &&
-            session.startTime < startOfNextDay
-        }
-    }
-    
-    // Calculate day progress position for a given time
-    private func calculateDayProgressPosition(for date: Date) -> Double {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
-        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0.0 }
-        
-        // Use endTime if available, otherwise startTime
-        let sessionTime = date
-        
-        // Calculate elapsed time since midnight
-        let elapsed = sessionTime.timeIntervalSince(startOfDay)
-        
-        // Calculate total time in the day (24 hours)
-        let totalDayDuration = startOfNextDay.timeIntervalSince(startOfDay)
-        
-        // Calculate progress (0.0 to 1.0)
-        let progress = elapsed / totalDayDuration
-        return min(1.0, max(0.0, progress))
-    }
-    
-    // Generate time markers for every 6 hours (12am, 6am, 12pm, 6pm)
-    private func generateTimeMarkers() -> [(hour: Int, position: Double, label: String)] {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
-        
-        var markers: [(hour: Int, position: Double, label: String)] = []
-        
-        // Generate markers for every 6 hours (0, 6, 12, 18)
-        for hour in stride(from: 0, to: 24, by: 6) {
-            guard let markerTime = calendar.date(byAdding: .hour, value: hour, to: startOfDay) else { continue }
-            let position = calculateDayProgressPosition(for: markerTime)
-            
-            // Format label: 12am, 6am, 12pm, 6pm
-            let label: String
-            if hour == 0 {
-                label = "12am"
-            } else if hour == 12 {
-                label = "12pm"
-            } else if hour < 12 {
-                label = "\(hour)am"
-            } else {
-                label = "\(hour - 12)pm"
-            }
-            
-            markers.append((hour: hour, position: position, label: label))
-        }
-        
-        return markers
-    }
-    
-    // Group sessions that are close together for stacking
-    private func groupSessionsForStacking(_ sessions: [PomodoroSession], threshold: Double = 0.01) -> [[PomodoroSession]] {
-        // Sort sessions by completion time
-        let sortedSessions = sessions.sorted { session1, session2 in
-            let time1 = session1.endTime ?? session1.startTime
-            let time2 = session2.endTime ?? session2.startTime
-            return time1 < time2
-        }
-        
-        var groups: [[PomodoroSession]] = []
-        var currentGroup: [PomodoroSession] = []
-        var lastPosition: Double = -1.0
-        
-        for session in sortedSessions {
-            let sessionTime = session.endTime ?? session.startTime
-            let position = calculateDayProgressPosition(for: sessionTime)
-            
-            // If this session is close to the last one (within threshold), add to current group
-            if lastPosition >= 0 && abs(position - lastPosition) < threshold {
-                currentGroup.append(session)
-            } else {
-                // Start a new group
-                if !currentGroup.isEmpty {
-                    groups.append(currentGroup)
-                }
-                currentGroup = [session]
-            }
-            lastPosition = position
-        }
-        
-        // Add the last group
-        if !currentGroup.isEmpty {
-            groups.append(currentGroup)
-        }
-        
-        return groups
-    }
-    
-    private let knobSize: CGFloat = 26
-    
-    // Haptic feedback constants
-    private let hapticThrottleInterval: TimeInterval = 0.05  // Max 20 Hz for continuous feedback
-    
-    // Theme access
-    private var theme: AppTheme {
-        viewModel.theme
+    @State private var isSetupPresented = false
+
+    // ── Duration drag bases (bottom handle on strip / digit drag on card)
+    @State private var blockDurBase:         Double  = 25
+    @State private var timerDigitDragBase:   Double  = 25
+    @State private var isResizingBlock:      Bool    = false
+    @State private var lastHandleTranslation: CGFloat = 0
+
+    // ── Live "now" refreshed every 30 s
+    @State private var nowDate: Date = Date()
+    private let minuteTicker = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+
+    // ── Strip layout constants  (2.4 pt/min → 144 pt/hr)
+    private let pxPerMin: CGFloat = 2.4
+    private var hourH:    CGFloat { pxPerMin * 60 }
+    private let stripW:   CGFloat = 110
+    private let gutterW:  CGFloat = 44
+
+    // ── "Sand" card colour  (#E8E3DA)
+    private let sand = Color(red: 232 / 255, green: 227 / 255, blue: 218 / 255)
+
+    // MARK: – Derived state
+
+    private var nowMins: Double {
+        let c = Calendar.current
+        return Double(c.component(.hour, from: nowDate) * 60
+                    + c.component(.minute, from: nowDate))
     }
 
-    /// Pause: orange outline (`warning`); Resume: green outline (`breakAccent`).
-    private var pauseResumeOutlineColor: Color {
-        viewModel.timerState == .running ? theme.warning : theme.breakAccent
+    private var pomodoroIndex: Int {
+        switch viewModel.currentSessionType {
+        case .work:                   return min(viewModel.completedPomodoros + 1, 4)
+        case .shortBreak, .longBreak: return min(max(viewModel.completedPomodoros, 1), 4)
+        }
     }
-    
-    private struct PressableButtonStyle: ButtonStyle {
-        let scale: CGFloat
-        let opacity: Double
 
-        init(scale: CGFloat = 0.98, opacity: Double = 0.92) {
-            self.scale = scale
-            self.opacity = opacity
+    private var titleText: String {
+        switch viewModel.currentSessionType {
+        case .work:       return "Pomodoro \(pomodoroIndex)."
+        case .shortBreak: return "Short break."
+        case .longBreak:  return "Long break."
         }
+    }
 
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .scaleEffect(configuration.isPressed ? scale : 1.0)
-                .opacity(configuration.isPressed ? opacity : 1.0)
-                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    private var sessionNumber: Int {
+        viewModel.currentSessionType == .work
+            ? viewModel.completedPomodoros + 1
+            : viewModel.completedPomodoros
+    }
+
+    private var mmStr: String { String(format: "%02d", max(0, viewModel.remainingSeconds) / 60) }
+    private var ssStr: String { String(format: "%02d", max(0, viewModel.remainingSeconds) % 60) }
+
+    private var todayStr: String {
+        let m = max(0, viewModel.totalFocusMinutes)
+        return m < 60 ? "\(m)m" : "\(m / 60)h \(m % 60)m"
+    }
+
+    private var goalStr: String {
+        let g = max(1, viewModel.dailyFocusGoalMinutes)
+        return "\(min(Int(Double(viewModel.totalFocusMinutes) / Double(g) * 100), 999))%"
+    }
+
+    private var trimmedTag: String? {
+        let t = viewModel.setupTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+
+    /// Block top:
+    ///   idle    → nowMins (live)
+    ///   running / paused → actual session start (nowMins − elapsed)
+    private var blockStartMins: Double {
+        guard viewModel.timerState != .idle else { return nowMins }
+        let elapsed = viewModel.selectedMinutes - Double(viewModel.remainingSeconds) / 60.0
+        return nowMins - elapsed
+    }
+
+    private var timerSubline: String {
+        let s = blockStartMins
+        let e = s + viewModel.selectedMinutes
+        return "\(fmtMins(s)) → \(fmtMins(e)) · \(Int(viewModel.selectedMinutes.rounded()))m"
+    }
+
+    private var primaryLabel: String {
+        switch viewModel.timerState {
+        case .running:   return "Pause"
+        case .paused:    return "Resume"
+        case .idle:      return "Start focus"
+        case .completed: return "Next"
         }
     }
-    
-    private struct AnimatedPercentText: AnimatableModifier {
-        var percent: Double
-        
-        var animatableData: Double {
-            get { percent }
-            set { percent = newValue }
-        }
-        
-        func body(content: Content) -> some View {
-            Text("\(Int(percent.rounded()))%")
+
+    private func primaryAction() {
+        switch viewModel.timerState {
+        case .running:         viewModel.pauseTimer()
+        case .paused, .idle:   viewModel.startTimer()
+        case .completed:       viewModel.startNextSession()
         }
     }
-    
+
+    // MARK: – Root layout
+
     var body: some View {
-        GeometryReader { outerGeometry in
-            let safeWidth = outerGeometry.size.width
-            let safeHeight = outerGeometry.size.height
-            let dialSize = max(240, min(safeWidth - 40, safeHeight * 0.46, 340))
-            let handLength = dialSize * 0.40
+        ZStack {
+            HC.bg.ignoresSafeArea()
+            VStack(spacing: 0) {
+                headerBar
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
+                hairline
+                HStack(spacing: 0) {
+                    calendarStrip
+                    HC.line.frame(width: 1)
+                    timerPanel
+                }
+                .frame(maxHeight: .infinity)
+                hairline
+                actionRow
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+            }
+        }
+        .sheet(isPresented: $isSetupPresented) { PomodoroSetupSheet(viewModel: viewModel) }
+        .onAppear {
+            nowDate            = Date()
+            blockDurBase       = viewModel.selectedMinutes
+            timerDigitDragBase = viewModel.selectedMinutes
+        }
+        .onReceive(minuteTicker) { nowDate = $0 }
+        .onChange(of: viewModel.selectedMinutes) { _, v in
+            // Only sync bases when an external source (stepper, setup sheet) changes
+            // the value — NOT while the user is actively dragging the block handle.
+            if viewModel.timerState == .idle && !isResizingBlock {
+                blockDurBase       = v
+                timerDigitDragBase = v
+            }
+        }
+    }
 
-            ZStack {
-                theme.background(.primary)
-                    .ignoresSafeArea()
+    private var hairline: some View {
+        Rectangle().fill(HC.line).frame(height: 1)
+    }
 
-                VStack(spacing: 0) {
-                    // Mission-control status strip (monospace labels)
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 6) {
-                            Text("FOCUSED \(formatTodayFocusTime())")
-                            Text("·")
-                                .foregroundColor(theme.text(.tertiary, opacity: 0.45))
-                            if dailyGoalMinutes() <= 0 {
-                                Text("NO DAILY TARGET")
-                            } else {
-                                Text("\(Int(focusGoalProgress * 100))% OF DAILY GOAL")
-                            }
-                        }
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
-                        .tracking(0.6)
-                        .foregroundColor(theme.text(.tertiary))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20)
-                        
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                Rectangle()
-                                    .fill(theme.borderPrimary.opacity(0.35))
-                                    .frame(height: 2)
-                                Rectangle()
-                                    .fill(theme.workAccent)
-                                    .frame(width: dailyGoalMinutes() <= 0 ? 0 : geometry.size.width * focusGoalProgress, height: 2)
-                                    .animation(.linear(duration: 0.35), value: focusGoalProgress)
-                            }
-                        }
-                        .frame(height: 2)
-                        .padding(.horizontal, 20)
-                    }
-                    .padding(.top, 16)
-                    
-                    Spacer()
-                    
-                    // Interactive circular dial
-                    ZStack {
-                    // Outer ring (thin)
-                    Circle()
-                        .stroke(theme.borderPrimary.opacity(0.55), lineWidth: 1)
-                        .frame(width: dialSize, height: dialSize)
-                    
-                    // Swept accent: selected arc when idle; during running/paused it shrinks with remaining time.
-                    let pieAngle: Double = {
-                        if viewModel.timerState == .idle {
-                            let currentTotalAngle = isDragging ? cumulativeDragAngle : viewModel.currentAngle
-                            return min(max(0, currentTotalAngle), 360.0)
-                        }
-                        // Shrinks from the full selected arc down to 0 as progress increases.
-                        return min(max(0, viewModel.elapsedAngle), 360.0)
-                    }()
-                    let sweepSessionActive = viewModel.timerState == .running || viewModel.timerState == .paused
-                    
-                    if pieAngle > 0 {
-                        SweptAreaView(
-                            totalAngle: pieAngle,
-                            dialSize: dialSize,
-                            color: viewModel.sessionAccentColor,
-                            opacityScale: sweepSessionActive ? 0.88 : 1.0,
-                            addDepthShadow: sweepSessionActive
-                        )
-                    }
-                    
-                    // Major ticks only (every 5 minutes)
-                    ForEach(0..<12) { i in
-                        let minute = i * 5
-                        let angle = (Double(minute) * 6.0) - 90.0
-                        let tickLength: CGFloat = 10
-                        let tickWidth: CGFloat = 1
-                        RoundedRectangle(cornerRadius: 0.5)
-                            .fill(theme.text(.tertiary, opacity: 0.4))
-                            .frame(width: tickWidth, height: tickLength)
-                            .offset(y: -dialSize / 2 + tickLength / 2)
-                            .rotationEffect(.degrees(angle))
-                    }
-                    
-                    // Progress ring: full circumference = 0–100% of session
-                    if viewModel.timerState == .running || viewModel.timerState == .paused {
-                        let ringTrim = min(1.0, max(0.0, viewModel.progress))
-                        Circle()
-                            .trim(from: 0, to: ringTrim)
-                            .stroke(
-                                viewModel.sessionAccentColor,
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                            )
-                            .frame(width: dialSize, height: dialSize)
-                            .rotationEffect(.degrees(-90))
-                            .animation(.linear(duration: 1.0), value: viewModel.progress)
-                    }
+    // MARK: – Header bar
 
-                    // Hand/needle
-                    // For display, use modulo 360° so the hand rotates visually
-                    let displayAngle = isDragging ? dragAngle : {
-                        let angle = viewModel.currentAngle.truncatingRemainder(dividingBy: 360.0)
-                        return angle < 0 ? angle + 360.0 : angle
-                    }()
-                    let handAngle: Double = {
-                        if viewModel.timerState == .running || viewModel.timerState == .paused {
-                            // When running/paused, show elapsed angle
-                            let angle = viewModel.elapsedAngle.truncatingRemainder(dividingBy: 360.0)
-                            return angle < 0 ? angle + 360.0 : angle
-                        } else {
-                            // When idle, show selected time angle
-                            return displayAngle
-                        }
-                    }()
-                    
-                    // Hand/needle
-                    ZStack {
-                        Capsule(style: .continuous)
-                            .fill(theme.text(.primary, opacity: 0.85))
-                            .frame(width: 2, height: handLength)
+    private var headerBar: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("SESSION №\(sessionNumber)").hcMonoLabel()
+                Text(titleText)
+                    .font(HC.display(20))
+                    .tracking(-0.8)
+                    .foregroundStyle(HC.ink)
+            }
+            Spacer()
+            if let tag = trimmedTag {
+                Text(tag.uppercased())
+                    .font(HC.mono(9, weight: .semibold))
+                    .tracking(1.0)
+                    .foregroundStyle(HC.bg)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(HC.ink, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(.top, 6)
+            }
+        }
+    }
 
-                        Circle()
-                            .fill(viewModel.sessionAccentColor.opacity(0.8))
-                            .frame(width: 5, height: 5)
-                            .offset(y: -handLength / 2 + 5)
-                    }
-                    .offset(y: -handLength / 2)
-                    .rotationEffect(.degrees(handAngle))
-                    .animation(isDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: handAngle)
-                    
-                    // Center knob
-                    Circle()
-                        .fill(theme.text(.primary))
-                        .frame(width: knobSize - 2, height: knobSize - 2)
-                        .overlay(
-                            Circle()
-                                .stroke(viewModel.sessionAccentColor.opacity(0.9), lineWidth: 1)
-                        )
-                        .scaleEffect(isDragging ? 1.04 : 1.0)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.65), value: isDragging)
+    // MARK: – Calendar strip
 
-                    // Session progress percent: below dial center (not on the ring)
-                    if viewModel.timerState == .running || viewModel.timerState == .paused {
-                        let pctA11y = Int((viewModel.progress * 100).rounded())
-                        let lineHeight: CGFloat = 22
-                        let belowKnobOffset = (knobSize - 2) / 2 + 8 + lineHeight / 2
+    private var calendarStrip: some View {
+        let totalH  = CGFloat(24 * 60) * pxPerMin  // 3 456 pt
+        let anchorY = CGFloat(nowMins) * pxPerMin
 
-                        Color.clear
-                            .modifier(AnimatedPercentText(percent: viewModel.progress * 100))
-                            .font(.system(size: 18, weight: .medium, design: .rounded))
-                            .foregroundColor(theme.text(.primary))
-                            .monospacedDigit()
-                            .offset(y: belowKnobOffset)
-                            .animation(.linear(duration: 1.0), value: viewModel.progress)
-                            .allowsHitTesting(false)
-                            .accessibilityLabel("Progress \(pctA11y) percent")
+        return ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                // The ZStack holds all visual layers; an overlaid VStack provides a
+                // layout-positioned anchor (offset() only moves visually — scrollTo
+                // needs a real layout position).
+                ZStack(alignment: .topLeading) {
+                    gridLayer(totalH: totalH)
+                    blockLayer(totalH: totalH)
+                    nowLayer(totalH: totalH)
+
+                    // Anchor sits at the correct layout Y so scrollTo works
+                    VStack(spacing: 0) {
+                        Color.clear.frame(width: 1, height: anchorY)
+                        Color.clear.frame(width: 1, height: 1).id("nowAnchor")
                     }
+                    .allowsHitTesting(false)
+                }
+                .frame(width: stripW, height: totalH, alignment: .topLeading)
+            }
+            .frame(width: stripW)
+            .scrollDisabled(isResizingBlock)
+            .onAppear { scrollToNow(proxy) }
+            .onChange(of: nowMins) { _, _ in scrollToNow(proxy) }
+        }
+    }
+
+    private func scrollToNow(_ proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            proxy.scrollTo("nowAnchor", anchor: UnitPoint(x: 0, y: 0.38))
+            try? await Task.sleep(for: .milliseconds(200))
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo("nowAnchor", anchor: UnitPoint(x: 0, y: 0.38))
+            }
+        }
+    }
+
+    // Hour grid lines + labels
+    @ViewBuilder
+    private func gridLayer(totalH: CGFloat) -> some View {
+        let hrLineColor   = Color(red: 224 / 255, green: 219 / 255, blue: 211 / 255)
+        let halfLineColor = Color(red: 236 / 255, green: 232 / 255, blue: 226 / 255)
+
+        Canvas { ctx, size in
+            for h in 0..<24 {
+                let y = CGFloat(h) * self.hourH
+                var p1 = Path()
+                p1.move(to: CGPoint(x: self.gutterW, y: y))
+                p1.addLine(to: CGPoint(x: size.width, y: y))
+                ctx.stroke(p1, with: .color(hrLineColor), lineWidth: 0.5)
+
+                var p2 = Path()
+                p2.move(to: CGPoint(x: self.gutterW, y: y + self.hourH / 2))
+                p2.addLine(to: CGPoint(x: size.width, y: y + self.hourH / 2))
+                ctx.stroke(p2, with: .color(halfLineColor), lineWidth: 0.5)
+            }
+        }
+        .frame(width: stripW, height: totalH)
+        .overlay(alignment: .topLeading) {
+            ZStack(alignment: .topLeading) {
+                ForEach(0..<24, id: \.self) { h in
+                    Text(hourLabel(h))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(HC.muted)
+                        .frame(width: gutterW - 10, alignment: .trailing)
+                        .offset(x: 0, y: CGFloat(h) * hourH - 7)
+                }
+            }
+            .frame(width: stripW, height: totalH, alignment: .topLeading)
+            .allowsHitTesting(false)
+        }
+        .allowsHitTesting(false)
+    }
+
+    // Session block
+    //   • Top  = blockStartMins (nowMins when idle; session start when live)
+    //   • Body is non-interactive (start is always "now")
+    //   • Bottom handle = only interactive edge; resizes selectedMinutes
+    //   • Elapsed fill shown while running
+    @ViewBuilder
+    private func blockLayer(totalH: CGFloat) -> some View {
+        let isIdle     = viewModel.timerState == .idle
+        let bStart     = blockStartMins
+        let bDur       = viewModel.selectedMinutes
+        let bTop       = CGFloat(bStart) * pxPerMin
+        let bH         = max(20, CGFloat(bDur) * pxPerMin)
+        let bW         = stripW - gutterW - 4
+        let bCX        = gutterW + bW / 2
+        let bCY        = bTop + bH / 2
+        let elapsed    = viewModel.selectedMinutes - Double(viewModel.remainingSeconds) / 60.0
+        let elapsedH   = isIdle ? CGFloat(0) : max(0, min(bH, CGFloat(elapsed) * pxPerMin))
+
+        ZStack {
+            Color.clear.frame(width: stripW, height: totalH)
+
+            // Block body (never draggable — only the bottom handle is)
+            ZStack(alignment: .top) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(HC.red.opacity(0.13))
+                // Elapsed-progress fill
+                if elapsedH > 0 {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(HC.red.opacity(0.28))
+                        .frame(height: elapsedH)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                }
+            }
+            .frame(width: bW, height: bH)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(HC.red, lineWidth: 1.5)
+            )
+            .position(x: bCX, y: bCY)
+            .allowsHitTesting(false)
+
+            // Time label inside block
+            if bH > 30 {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(fmtMins(bStart))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(HC.red)
+                    if bH > 52 {
+                        Text("\(Int(bDur.rounded()))m")
+                            .font(.system(size: 9))
+                            .foregroundStyle(HC.red.opacity(0.7))
                     }
-                    .frame(width: dialSize, height: dialSize)
-                .gesture(
+                }
+                .padding(.horizontal, 6)
+                .padding(.top, 8)
+                .frame(width: bW, height: bH, alignment: .topLeading)
+                .position(x: bCX, y: bCY)
+                .allowsHitTesting(false)
+            }
+
+            // Bottom resize handle — visible & interactive when idle.
+            // Larger hit target + minimumDistance: 0 so the high-priority gesture
+            // preempts the parent ScrollView's pan immediately on touch (otherwise
+            // the strip scrolls before the handle wins). Bottom edge tracks the
+            // finger 1:1 along the timeline (translation / pxPerMin minutes).
+            if isIdle {
+                ZStack {
+                    Capsule()
+                        .fill(HC.red.opacity(isResizingBlock ? 0.95 : 0.6))
+                        .frame(width: isResizingBlock ? 28 : 20, height: 4)
+                        .animation(.easeOut(duration: 0.12), value: isResizingBlock)
+                }
+                .frame(width: bW, height: 36)
+                .contentShape(Rectangle())
+                .position(x: bCX, y: bTop + bH)
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            // Allow interaction when idle (user can set new time)
-                            if viewModel.timerState == .idle {
-                                if !isDragging {
-                                    isDragging = true
-                                    lastSelectedMinutes = viewModel.selectedMinutes
-                                    // Initialize cumulative angle from current minutes
-                                    cumulativeDragAngle = AngleUtilities.minutesToAngle(
-                                        viewModel.selectedMinutes,
-                                        minMinutes: viewModel.minMinutes,
-                                        maxMinutes: viewModel.maxMinutes
-                                    )
-                                    lastDragAngle = AngleUtilities.angleFromPoint(value.location, center: CGPoint(x: dialSize / 2, y: dialSize / 2))
-                                    
-                                    // Initialize haptic tracking from current position
-                                    let currentMinute = Int(viewModel.selectedMinutes)
-                                    lastHapticMinute = currentMinute
-                                    lastHapticMajorTick = currentMinute / 5
-                                    lastHapticTime = Date()
-                                    
-                                    // Test haptic on drag start (if enabled) to verify generators work
-                                    if viewModel.hapticsEnabled {
-                                        triggerSelectionHaptic()
-                                    }
-                                }
-                                
-                                let center = CGPoint(x: dialSize / 2, y: dialSize / 2)
-                                let currentAngle = AngleUtilities.angleFromPoint(value.location, center: center)
-                                
-                                // Detect wraparound (crossing 0°/360° boundary)
-                                var angleDelta = currentAngle - lastDragAngle
-                                
-                                // Handle wraparound: if angle jumps from ~360° to ~0° (clockwise)
-                                if angleDelta < -180.0 {
-                                    angleDelta += 360.0
-                                }
-                                // Handle wraparound: if angle jumps from ~0° to ~360° (counter-clockwise)
-                                else if angleDelta > 180.0 {
-                                    angleDelta -= 360.0
-                                }
-                                
-                                // Update cumulative angle
-                                cumulativeDragAngle += angleDelta
-                                
-                                // Hard limit at maxMinutes (supports multiple rotations: 60 minutes = 360°)
-                                let maxAngle = (viewModel.maxMinutes / 60.0) * 360.0
-                                cumulativeDragAngle = max(0, min(maxAngle, cumulativeDragAngle))
-                                
-                                // Update visual angle for display (modulo 360 for visual rotation)
-                                dragAngle = cumulativeDragAngle.truncatingRemainder(dividingBy: 360.0)
-                                if dragAngle < 0 {
-                                    dragAngle += 360.0
-                                }
-                                
-                                // Calculate minutes from cumulative angle
-                                let minutesFloat = (cumulativeDragAngle / 360.0) * 60.0
-                                // Round to whole minutes (no seconds)
-                                let roundedMinutes = round(minutesFloat)
-                                let clampedMinutes = max(viewModel.minMinutes, min(viewModel.maxMinutes, roundedMinutes))
-                                
-                                // Update local state for smooth display (always whole minutes)
-                                dragRemainingSeconds = Int(clampedMinutes * 60)
-                                
-                                // Haptic feedback logic (only if enabled)
-                                if viewModel.hapticsEnabled {
-                                    let currentMinute = Int(clampedMinutes)
-                                    let currentMajorTick = currentMinute / 5  // 5-minute intervals
-                                    let now = Date()
-                                    
-                                    // Check if we crossed a 5-minute mark (major tick)
-                                    if currentMajorTick != lastHapticMajorTick && currentMajorTick >= 0 {
-                                        triggerImpactHaptic()
-                                        lastHapticMajorTick = currentMajorTick
-                                        lastHapticMinute = currentMinute
-                                        lastHapticTime = now
-                                    }
-                                    // Check if we crossed a minute boundary (light feedback)
-                                    else if currentMinute != lastHapticMinute && currentMinute >= 0 {
-                                        // Throttle continuous feedback
-                                        if now.timeIntervalSince(lastHapticTime) >= hapticThrottleInterval {
-                                            triggerSelectionHaptic()
-                                            lastHapticMinute = currentMinute
-                                            lastHapticTime = now
-                                        }
-                                    }
-                                }
-                                
-                                lastDragAngle = currentAngle
+                        .onChanged { v in
+                            if !isResizingBlock {
+                                isResizingBlock       = true
+                                lastHandleTranslation = 0
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                             }
+                            // Incremental delta — avoids any compounding regardless of
+                            // how onChange(of: selectedMinutes) fires during the drag.
+                            let currentT  = v.translation.height
+                            let deltaT    = currentT - lastHandleTranslation
+                            lastHandleTranslation = currentT
+                            let deltaMins = Double(deltaT) / Double(pxPerMin)
+                            let d = max(5, min(240, viewModel.selectedMinutes + deltaMins))
+                            viewModel.setTimeFromMinutes(d)
                         }
-                        .onEnded { value in
-                            // Allow interaction when idle (user can set new time)
-                            if isDragging && viewModel.timerState == .idle {
-                                // Use cumulative angle for final calculation
-                                // Apply snapping only when drag ends
-                                viewModel.setTimeFromAngle(cumulativeDragAngle, force: true)
-                            }
-                            isDragging = false
-                            dragRemainingSeconds = 0  // Reset drag display
-                            cumulativeDragAngle = 0
-                            lastDragAngle = 0
-                            
-                            // Reset haptic tracking
-                            lastHapticMinute = -1
-                            lastHapticMajorTick = -1
+                        .onEnded { _ in
+                            isResizingBlock       = false
+                            lastHandleTranslation = 0
+                            blockDurBase          = viewModel.selectedMinutes
+                            timerDigitDragBase    = viewModel.selectedMinutes
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                         }
                 )
-                .accessibilityLabel("Timer dial")
-                .accessibilityValue(String(format: "%.2f minutes", viewModel.selectedMinutes))
-                
-                    // Time display
-                    VStack(spacing: 4) {
-                    // Show seconds during countdown (running/paused), minutes only when idle
-                    let displaySeconds = isDragging ? dragRemainingSeconds : viewModel.remainingSeconds
-                    let timeText = (viewModel.timerState == .running || viewModel.timerState == .paused)
-                        ? AngleUtilities.formatTime(displaySeconds)  // Show MM:SS during countdown
-                        : AngleUtilities.formatTimeMinutesOnly(displaySeconds)  // Show MM:00 when idle
-                    
-                    Text(timeText)
-                        .font(.system(size: 44, weight: .medium, design: .rounded))
-                        .foregroundColor(viewModel.sessionAccentColor)
-                        .monospacedDigit()
-                        .tracking(2)
-                        .shadow(color: viewModel.sessionAccentColor.opacity(0.22), radius: 12, x: 0, y: 0)
-                        .accessibilityLabel("Remaining time: \(timeText)")
-                    }
-                    .padding(.top, 14)
-                    
-                    Spacer()
-                    
-                    // Control buttons
-                    HStack(spacing: 12) {
-                    if viewModel.timerState == .running || viewModel.timerState == .paused {
-                        // End button
-                        Button(action: {
-                            if viewModel.hapticsEnabled {
-                                // Make "End" feel decisive (closer to the dial's major tick impact).
-                                HapticManager.playImpact(style: .heavy)
-                            }
-                            viewModel.resetTimer()
-                        }) {
-                            Text("End")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .tracking(0.4)
-                                .foregroundColor(theme.destructiveAccent)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color.clear)
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(theme.destructiveAccent.opacity(0.95), lineWidth: 1)
-                                )
-                        }
-                        .accessibilityLabel("End timer")
-                            .buttonStyle(PressableButtonStyle())
-                        
-                        // Pause/Resume button
-                        Button(action: {
-                            if viewModel.hapticsEnabled {
-                                if viewModel.timerState == .running {
-                                    // Pause should feel clearly intentional.
-                                    HapticManager.playImpact(style: .heavy)
-                                } else {
-                                    // Resume: same strength as pause for consistency.
-                                    HapticManager.playImpact(style: .heavy)
-                                }
-                            }
-                            if viewModel.timerState == .running {
-                                viewModel.pauseTimer()
-                            } else {
-                                viewModel.startTimer()
-                            }
-                        }) {
-                            Text(viewModel.timerState == .running ? "Pause" : "Resume")
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .tracking(0.4)
-                                .foregroundColor(pauseResumeOutlineColor)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color.clear)
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(pauseResumeOutlineColor.opacity(0.95), lineWidth: 1)
-                                )
-                        }
-                        .accessibilityLabel(viewModel.timerState == .running ? "Pause timer" : "Resume timer")
-                            .buttonStyle(PressableButtonStyle())
-                    } else {
-                        // Setup button row
-                        HStack {
-                            Button {
-                                isSetupPresented = true
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "slider.horizontal.3")
-                                        .font(.system(size: 13, weight: .semibold))
-                                    Text("Setup")
-                                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                                        .tracking(0.4)
-                                }
-                                .foregroundColor(theme.text(.secondary))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
-                                .background(theme.background(.secondary))
-                                .cornerRadius(10)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(theme.borderPrimary.opacity(0.7), lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(viewModel.timerState != .idle)
-                            
-                            Spacer()
-                            
-                            // Small chip showing current setup (if any)
-                            let title = viewModel.setupTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let tag = viewModel.setupTag.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !title.isEmpty || !tag.isEmpty {
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    if !title.isEmpty {
-                                        Text(title)
-                                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                                            .foregroundColor(theme.text(.primary))
-                                            .lineLimit(1)
-                                    }
-                                    if !tag.isEmpty {
-                                        Text(tag)
-                                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                                            .foregroundColor(viewModel.setupTagColor.color)
-                                            .lineLimit(1)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 10)
-                        
-                        // Start button (full width when idle)
-                        Button(action: {
-                            if viewModel.hapticsEnabled {
-                                // Start: stronger than medium so it doesn't feel "mild".
-                                HapticManager.playImpact(style: .heavy)
-                            }
-                            // Commit dial drag before starting so `selectedMinutes` matches what the user sees
-                            // (avoids taps before DragGesture.onEnded updates the view model).
-                            if isDragging {
-                                viewModel.setTimeFromAngle(cumulativeDragAngle, force: true)
-                                isDragging = false
-                                dragRemainingSeconds = 0
-                                cumulativeDragAngle = 0
-                                lastDragAngle = 0
-                                lastHapticMinute = -1
-                                lastHapticMajorTick = -1
-                            }
-                            viewModel.startTimer()
-                        }) {
-                            Text("Start")
-                                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                .tracking(0.8)
-                                .foregroundColor(theme.breakAccent)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 15)
-                                .background(Color.clear)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(theme.breakAccent.opacity(0.95), lineWidth: 1)
-                                )
-                        }
-                        .accessibilityLabel("Start session")
-                            .buttonStyle(PressableButtonStyle(scale: 0.985, opacity: 0.94))
-                    }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 36)
-                }
             }
         }
-        .fontDesign(.rounded)
-        // Note: Completion alert removed - timer now resets to idle state automatically
-        .onAppear {
-            viewModel.updateSettings()
-            viewModel.syncTimerState()
-        }
-        .sheet(isPresented: $isSetupPresented) {
-            PomodoroSetupSheet(viewModel: viewModel)
-        }
-    }
-}
-
-// Helper view to draw swept area (pie slice) for a single rotation (0-60 minutes)
-struct SweptAreaView: View {
-    let totalAngle: Double  // Angle from 0-360° (0-60 minutes)
-    let dialSize: CGFloat
-    let color: Color
-    /// Tapers fill when session is active so the progress ring stays primary.
-    let opacityScale: Double
-    /// Subtle shadow for depth (session running/paused); keeps HUD flat elsewhere.
-    let addDepthShadow: Bool
-
-    init(
-        totalAngle: Double,
-        dialSize: CGFloat,
-        color: Color,
-        opacityScale: Double = 1.0,
-        addDepthShadow: Bool = false
-    ) {
-        self.totalAngle = totalAngle
-        self.dialSize = dialSize
-        self.color = color
-        self.opacityScale = opacityScale
-        self.addDepthShadow = addDepthShadow
     }
 
-    var body: some View {
-        GeometryReader { geometry in
-            let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-            let radius = min(geometry.size.width, geometry.size.height) / 2
-            let s = min(1.2, max(0.4, opacityScale))
+    // Red "now" line + left dot
+    @ViewBuilder
+    private func nowLayer(totalH: CGFloat) -> some View {
+        let y = CGFloat(nowMins) * pxPerMin
+        ZStack(alignment: .topLeading) {
+            Rectangle()
+                .fill(HC.red)
+                .frame(width: stripW - gutterW, height: 2)
+                .offset(x: gutterW, y: y - 1)
+            Circle()
+                .fill(HC.red)
+                .frame(width: 8, height: 8)
+                .offset(x: gutterW - 4, y: y - 4)
+        }
+        .frame(width: stripW, height: totalH, alignment: .topLeading)
+        .allowsHitTesting(false)
+    }
 
-            let fillGradient = RadialGradient(
-                gradient: Gradient(colors: [
-                    color.opacity(0.42 * s),
-                    color.opacity(0.30 * s)
-                ]),
-                center: .center,
-                startRadius: 0,
-                endRadius: radius
+    // MARK: – Timer panel (right side)
+
+    private var timerPanel: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 8) {
+                timerCard
+                statsRow
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var timerCard: some View {
+        let isIdle = viewModel.timerState == .idle
+
+        return VStack(alignment: .leading, spacing: 0) {
+            // "REMAINING" label + pomodoro badge
+            HStack {
+                Text("REMAINING").hcMonoLabel(size: 9)
+                Spacer()
+                Text("\(pomodoroIndex)/4")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(HC.red, in: Capsule())
+            }
+            .padding(.bottom, 6)
+
+            // Big condensed digits
+            // When idle: vertical drag sets duration (up = more, down = less)
+            HStack(spacing: 0) {
+                Text(mmStr).foregroundStyle(HC.ink)
+                Text(":")
+                    .foregroundStyle(HC.red)
+                    .padding(.bottom, 2)
+                Text(ssStr).foregroundStyle(HC.ink)
+            }
+            .font(.custom("HelveticaNeue-CondensedBlack", size: 72))
+            .monospacedDigit()
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .gesture(
+                isIdle ?
+                DragGesture(minimumDistance: 6)
+                    .onChanged { v in
+                        // drag up (negative height) = more time; ~7 pt = 1 min
+                        let d = max(5, min(240,
+                            timerDigitDragBase - Double(v.translation.height) * 0.15))
+                        viewModel.setTimeFromMinutes(d)
+                    }
+                    .onEnded { _ in
+                        timerDigitDragBase = viewModel.selectedMinutes
+                        blockDurBase       = viewModel.selectedMinutes
+                    }
+                : nil
             )
 
-            // Calculate angles and positions outside ViewBuilder branches.
-            let startAngleRadians = (270.0 * .pi / 180.0)  // Top in SwiftUI
-            let endAngleDegrees = (270.0 + totalAngle).truncatingRemainder(dividingBy: 360.0)
-            let endAngleRadians = endAngleDegrees * .pi / 180.0
-
-            if totalAngle > 0.1 {
-                if totalAngle >= 360.0 {
-                    Circle()
-                        .fill(fillGradient)
-                        .frame(width: dialSize, height: dialSize)
-                        .overlay(
-                            Circle()
-                                .stroke(color.opacity(0.35 * s), lineWidth: 1)
-                        )
-                } else {
-                    Path { path in
-                        path.move(to: center)
-                        path.addArc(
-                            center: center,
-                            radius: radius,
-                            startAngle: Angle(radians: Double(startAngleRadians)),
-                            endAngle: Angle(radians: Double(endAngleRadians)),
-                            clockwise: false
-                        )
-                        path.closeSubpath()
+            // Stepper row (idle only) — primary tap affordance; drag still works
+            if isIdle {
+                HStack(spacing: 8) {
+                    stepperButton(delta: -5)
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.up.arrow.down")
+                            .font(.system(size: 7, weight: .semibold))
+                        Text("drag or tap")
+                            .font(.system(size: 8, weight: .medium))
+                            .tracking(0.5)
                     }
-                    .fill(fillGradient)
-                    .overlay(
-                        Path { path in
-                            path.move(to: center)
-                            path.addArc(
-                                center: center,
-                                radius: radius,
-                                startAngle: Angle(radians: Double(startAngleRadians)),
-                                endAngle: Angle(radians: Double(endAngleRadians)),
-                                clockwise: false
-                            )
-                            path.closeSubpath()
-                        }
-                        .stroke(color.opacity(0.35 * s), lineWidth: 1)
-                    )
+                    .foregroundStyle(HC.muted.opacity(0.45))
+                    Spacer()
+                    stepperButton(delta: +5)
                 }
+                .padding(.top, 6)
+            }
+
+            // "HH:MM → HH:MM · Nm"
+            Text(timerSubline)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(HC.muted)
+                .padding(.top, isIdle ? 4 : 2)
+
+            segmentBar.padding(.top, 10)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(sand, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var segmentBar: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<4, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(i < pomodoroIndex ? HC.red : HC.line)
+                    .frame(height: 3)
+                    .animation(.easeInOut(duration: 0.2), value: pomodoroIndex)
             }
         }
-        .frame(width: dialSize, height: dialSize)
-        .shadow(
-            color: addDepthShadow ? color.opacity(0.22) : .clear,
-            radius: addDepthShadow ? 10 : 0,
-            x: 0,
-            y: addDepthShadow ? 4 : 0
-        )
     }
-}
 
-// MARK: - Session Blocks View
-
-struct SessionBlocksOverlay: View {
-    let geometry: GeometryProxy
-    let dayProgress: Double
-    let theme: AppTheme
-    
-    private var todaySessions: [PomodoroSession] {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
-        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return [] }
-        
-        let dataStore = PomodoroDataStore.shared
-        let allSessions = dataStore.getAllSessions()
-        
-        return allSessions.filter { session in
-            session.sessionType == .work &&
-            session.status == .completed &&
-            session.startTime >= startOfDay &&
-            session.startTime < startOfNextDay
+    private var statsRow: some View {
+        HStack(spacing: 6) {
+            statCell(label: "TODAY", value: todayStr)
+            statCell(label: "GOAL",  value: goalStr)
         }
     }
-    
-    private func calculateDayProgressPosition(for date: Date) -> Double {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
-        guard let startOfNextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return 0.0 }
-        
-        let elapsed = date.timeIntervalSince(startOfDay)
-        let totalDayDuration = startOfNextDay.timeIntervalSince(startOfDay)
-        let progress = elapsed / totalDayDuration
-        return min(1.0, max(0.0, progress))
-    }
-    
-    private func groupSessionsForStacking(_ sessions: [PomodoroSession], threshold: Double = 0.01) -> [[PomodoroSession]] {
-        let sortedSessions = sessions.sorted { session1, session2 in
-            let time1 = session1.endTime ?? session1.startTime
-            let time2 = session2.endTime ?? session2.startTime
-            return time1 < time2
+
+    private func statCell(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold))
+                .tracking(1.0)
+                .foregroundStyle(HC.muted)
+            Text(value)
+                .font(.custom("HelveticaNeue-CondensedBlack", size: 18))
+                .foregroundStyle(HC.ink)
         }
-        
-        var groups: [[PomodoroSession]] = []
-        var currentGroup: [PomodoroSession] = []
-        var lastPosition: Double = -1.0
-        
-        for session in sortedSessions {
-            let sessionTime = session.endTime ?? session.startTime
-            let position = calculateDayProgressPosition(for: sessionTime)
-            
-            if lastPosition >= 0 && abs(position - lastPosition) < threshold {
-                currentGroup.append(session)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(sand, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    // MARK: – Action row
+
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            Button(action: primaryAction) {
+                HStack(spacing: 8) {
+                    Image(systemName: viewModel.timerState == .running ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text(primaryLabel)
+                        .font(HC.text(15, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(HC.red, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            if viewModel.timerState != .idle {
+                Button { viewModel.resetTimer() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(HC.ink)
+                        .frame(width: 48, height: 48)
+                        .background(sand, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                }
+                .buttonStyle(.plain)
             } else {
-                if !currentGroup.isEmpty {
-                    groups.append(currentGroup)
+                Button { isSetupPresented = true } label: {
+                    Text("SETUP")
+                        .font(HC.mono(10, weight: .semibold))
+                        .tracking(1.0)
+                        .foregroundStyle(HC.ink)
+                        .frame(width: 70, height: 48)
+                        .background(sand, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                 }
-                currentGroup = [session]
-            }
-            lastPosition = position
-        }
-        
-        if !currentGroup.isEmpty {
-            groups.append(currentGroup)
-        }
-        
-        return groups
-    }
-    
-    private func calculateBlockWidth(for session: PomodoroSession) -> CGFloat {
-        // Use the same logic as CalendarView for consistency
-        // Priority: activeDuration > actualDuration > plannedDuration
-        let durationMinutes: Double
-        
-        if let activeDuration = session.activeDurationMinutes {
-            durationMinutes = activeDuration
-        } else if let actualDuration = session.actualDurationMinutes {
-            durationMinutes = actualDuration
-        } else {
-            // Fallback: calculate from startTime to endTime if available
-            if let endTime = session.endTime {
-                durationMinutes = (endTime.timeIntervalSince(session.startTime) / 60.0)
-            } else {
-                durationMinutes = session.plannedDurationMinutes
-            }
-        }
-        
-        // Linear scale: 1 point per 5 minutes
-        // Minimum: 2pt, Maximum: 10pt
-        let calculatedWidth = durationMinutes / 5.0
-        let clampedWidth = max(2.0, min(10.0, calculatedWidth))
-        
-        #if DEBUG
-        print("Session - planned: \(session.plannedDurationMinutes)min, actual: \(session.actualDurationMinutes?.description ?? "nil"), active: \(session.activeDurationMinutes?.description ?? "nil"), calculated: \(durationMinutes)min, width: \(clampedWidth)pt")
-        #endif
-        
-        return CGFloat(clampedWidth)
-    }
-    
-    var body: some View {
-        let sessionGroups = groupSessionsForStacking(todaySessions, threshold: 0.015)
-        
-        ForEach(Array(sessionGroups.enumerated()), id: \.offset) { groupIndex, group in
-            // Render each session individually with its own width and position
-            // Add slight offset for stacking when sessions are grouped together
-            ForEach(Array(group.enumerated()), id: \.element.id) { sessionIndex, session in
-                let sessionTime = session.endTime ?? session.startTime
-                let basePosition = calculateDayProgressPosition(for: sessionTime)
-                
-                // Calculate offset for stacking (spread out slightly if multiple in group)
-                let stackOffset: Double = group.count > 1 ? (Double(sessionIndex) - Double(group.count - 1) / 2.0) * 0.002 : 0.0
-                let position = basePosition + stackOffset
-                
-                if position <= dayProgress {
-                    SessionBlockView(
-                        geometry: geometry,
-                        session: session,
-                        position: position,
-                        blockWidth: calculateBlockWidth(for: session),
-                        theme: theme
-                    )
-                }
+                .buttonStyle(.plain)
             }
         }
     }
-}
 
-struct SessionBlockView: View {
-    let geometry: GeometryProxy
-    let session: PomodoroSession
-    let position: Double
-    let blockWidth: CGFloat
-    let theme: AppTheme
-    
-    private var blockColor: Color {
-        switch session.sessionType {
-        case .work:
-            return theme.workAccent
-        case .shortBreak, .longBreak:
-            return theme.breakAccent
+    // MARK: – Stepper button
+
+    private func stepperButton(delta: Int) -> some View {
+        Button {
+            let newVal = max(5, min(240, viewModel.selectedMinutes + Double(delta)))
+            viewModel.setTimeFromMinutes(newVal)
+            timerDigitDragBase = viewModel.selectedMinutes
+            blockDurBase       = viewModel.selectedMinutes
+        } label: {
+            Text(delta > 0 ? "+\(delta)" : "\(delta)")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(HC.ink)
+                .frame(width: 40, height: 26)
+                .background(HC.line.opacity(0.6), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: – Helpers
+
+    private func hourLabel(_ h: Int) -> String {
+        switch h {
+        case 0:  return "12am"
+        case 12: return "12pm"
+        default: return h < 12 ? "\(h)am" : "\(h - 12)pm"
         }
     }
-    
-    var body: some View {
-        // Center the block at the completion time position
-        let xPosition = geometry.size.width * position
-        
-        RoundedRectangle(cornerRadius: 1)
-            .fill(blockColor)
-            .frame(width: blockWidth, height: 10)
-            .offset(x: xPosition - blockWidth / 2, y: 0)
+
+    private func fmtMins(_ totalMins: Double) -> String {
+        let h  = Int(totalMins) / 60 % 24
+        let m  = Int(totalMins) % 60
+        let hh = h % 12 == 0 ? 12 : h % 12
+        return "\(hh):\(String(format: "%02d", m)) \(h >= 12 ? "PM" : "AM")"
     }
 }
 
 #Preview {
     TimerView(viewModel: TimerViewModel())
 }
-
