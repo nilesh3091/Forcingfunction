@@ -316,32 +316,6 @@ enum CategoryColor: String, CaseIterable, Codable {
     }
 }
 
-/// Represents a category for pomodoro sessions
-struct Category: Codable, Identifiable {
-    let id: UUID
-    var name: String
-    var color: CategoryColor
-    let createdDate: Date
-    var isArchived: Bool
-    var archivedDate: Date?
-    
-    init(
-        id: UUID = UUID(),
-        name: String,
-        color: CategoryColor,
-        createdDate: Date = Date(),
-        isArchived: Bool = false,
-        archivedDate: Date? = nil
-    ) {
-        self.id = id
-        self.name = name
-        self.color = color
-        self.createdDate = createdDate
-        self.isArchived = isArchived
-        self.archivedDate = archivedDate
-    }
-}
-
 /// Represents a complete pomodoro session with all its data
 struct PomodoroSession: Codable, Identifiable {
     let id: UUID
@@ -489,60 +463,6 @@ struct Project: Codable, Identifiable {
     /// Sub-tags of a given parent tag.
     func subTags(of parentId: UUID) -> [ProjectTag] {
         tags.filter { $0.parentId == parentId }.sorted { $0.createdDate < $1.createdDate }
-    }
-}
-
-// MARK: - Task Models
-
-/// Represents a task with pomodoro time tracking
-struct PomodoroTask: Codable, Identifiable {
-    let id: UUID
-    var title: String
-    var notes: String?
-    var isCompleted: Bool
-    var totalPomodoroMinutes: Double  // Accumulated time in minutes
-    let createdDate: Date
-    var completedDate: Date?
-    var isArchived: Bool  // Same as isCompleted, but explicit for clarity
-    var categoryId: UUID?  // Optional category assignment
-    
-    init(
-        id: UUID = UUID(),
-        title: String,
-        notes: String? = nil,
-        isCompleted: Bool = false,
-        totalPomodoroMinutes: Double = 0.0,
-        createdDate: Date = Date(),
-        completedDate: Date? = nil,
-        isArchived: Bool = false,
-        categoryId: UUID? = nil
-    ) {
-        self.id = id
-        self.title = title
-        self.notes = notes
-        self.isCompleted = isCompleted
-        self.totalPomodoroMinutes = totalPomodoroMinutes
-        self.createdDate = createdDate
-        self.completedDate = completedDate
-        self.isArchived = isArchived
-        self.categoryId = categoryId
-    }
-    
-    /// Format accumulated time as "Xh Ym" or "Ym"
-    var formattedTime: String {
-        let totalMinutes = Int(totalPomodoroMinutes)
-        let hours = totalMinutes / 60
-        let minutes = totalMinutes % 60
-        
-        if hours > 0 {
-            if minutes > 0 {
-                return "\(hours)h \(minutes)m"
-            } else {
-                return "\(hours)h"
-            }
-        } else {
-            return "\(minutes)m"
-        }
     }
 }
 
