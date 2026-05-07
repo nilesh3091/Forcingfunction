@@ -44,6 +44,5 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
 
 extension Notification.Name {
     static let timerCompletedInBackground = Notification.Name("timerCompletedInBackground")
-    static let categoriesDidChange = Notification.Name("categoriesDidChange")
 }
 

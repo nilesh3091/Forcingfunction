@@ -15,9 +15,9 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 0 — Triage & Honesty
   PHASE STARTED     : 2026-05-07
-  LAST COMPLETED    : 0.2 — Delete dead model code (Category + PomodoroTask)
+  LAST COMPLETED    : 0.3 — Delete categoriesDidChange notification
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 0.3 — Delete categoriesDidChange notification
+  NEXT TO DO        : Step 0.4 — Remove categoryId from PomodoroSession
   PHASE COMPLETE    : ❌ no
 ═══════════════════════════════════════════════════════════
 
@@ -26,7 +26,7 @@ STEP CHECKLIST:
   [x] 0.0  Setup & baseline                     (verify env, create branch)
   [x] 0.1  Delete Item.swift                    (dead SwiftData artifact)
   [x] 0.2  Delete dead model code               (Category + PomodoroTask in Models.swift)
-  [ ] 0.3  Delete categoriesDidChange notif     (NotificationDelegate.swift)
+  [x] 0.3  Delete categoriesDidChange notif     (NotificationDelegate.swift)
   [ ] 0.4  Remove categoryId from session       (Models.swift + 2 refs in TimerViewModel)
   [ ] 0.5  Trim AppTheme to actually-used props (Models.swift)
   [ ] 0.6  Delete "Reset Statistics" button     (SettingsView.swift)
