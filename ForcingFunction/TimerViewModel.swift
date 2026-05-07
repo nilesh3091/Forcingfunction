@@ -321,7 +321,6 @@ class TimerViewModel: ObservableObject {
             pauseStartTime = nil
             
             // Create new session
-            let sessionCategoryId: UUID? = nil
             let cleanTitle = setupTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             let cleanTag = setupTag.trimmingCharacters(in: .whitespacesAndNewlines)
             let newSession = PomodoroSession(
@@ -331,7 +330,6 @@ class TimerViewModel: ObservableObject {
                 status: .running,
                 events: [SessionEvent(timestamp: now, eventType: .started)],
                 wasAutoStarted: isAutoStartingNext,
-                categoryId: sessionCategoryId,
                 title: cleanTitle.isEmpty ? nil : cleanTitle,
                 tag: cleanTag.isEmpty ? nil : cleanTag,
                 tagColor: (cleanTag.isEmpty ? nil : setupTagColor),
@@ -823,8 +821,6 @@ class TimerViewModel: ObservableObject {
             // If we still can't find it, create a new one based on saved state
             // This handles edge cases where the session was never saved
             if let sessionType = SessionType(rawValue: savedSessionTypeRaw) {
-                let sessionCategoryId: UUID? = nil
-                
                 let newSession = PomodoroSession(
                     sessionType: sessionType,
                     startTime: startTime,
@@ -832,7 +828,6 @@ class TimerViewModel: ObservableObject {
                     status: timerState == .running ? .running : .paused,
                     events: [SessionEvent(timestamp: startTime, eventType: .started)],
                     wasAutoStarted: false,
-                    categoryId: sessionCategoryId,
                     title: nil,
                     tag: nil,
                     tagColor: nil

@@ -326,8 +326,7 @@ struct PomodoroSession: Codable, Identifiable {
     var status: SessionStatus
     var events: [SessionEvent]
     let wasAutoStarted: Bool
-    var categoryId: UUID?
-    
+
     /// Optional per-session metadata (set via the Timer "Setup" flow).
     /// These are optional to keep backward-compatible decoding for existing saved sessions.
     var title: String?
@@ -381,7 +380,6 @@ struct PomodoroSession: Codable, Identifiable {
         status: SessionStatus = .running,
         events: [SessionEvent] = [],
         wasAutoStarted: Bool = false,
-        categoryId: UUID? = nil,
         title: String? = nil,
         tag: String? = nil,
         tagColor: CategoryColor? = nil,
@@ -396,7 +394,6 @@ struct PomodoroSession: Codable, Identifiable {
         self.status = status
         self.events = events
         self.wasAutoStarted = wasAutoStarted
-        self.categoryId = categoryId
         self.title = title
         self.tag = tag
         self.tagColor = tagColor
