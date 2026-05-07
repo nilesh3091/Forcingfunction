@@ -15,16 +15,16 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 0 — Triage & Honesty
   PHASE STARTED     : 2026-05-07
-  LAST COMPLETED    : 0.0 — Setup & baseline
+  LAST COMPLETED    : 0.1 — Delete Item.swift
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 0.1 — Delete Item.swift
+  NEXT TO DO        : Step 0.2 — Delete dead model code (Category + PomodoroTask)
   PHASE COMPLETE    : ❌ no
 ═══════════════════════════════════════════════════════════
 
 STEP CHECKLIST:
 
   [x] 0.0  Setup & baseline                     (verify env, create branch)
-  [ ] 0.1  Delete Item.swift                    (dead SwiftData artifact)
+  [x] 0.1  Delete Item.swift                    (dead SwiftData artifact)
   [ ] 0.2  Delete dead model code               (Category + PomodoroTask in Models.swift)
   [ ] 0.3  Delete categoriesDidChange notif     (NotificationDelegate.swift)
   [ ] 0.4  Remove categoryId from session       (Models.swift + 2 refs in TimerViewModel)
