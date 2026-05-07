@@ -15,9 +15,9 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 0 — Triage & Honesty
   PHASE STARTED     : 2026-05-07
-  LAST COMPLETED    : 0.5 — Trim AppTheme to actually-used props
+  LAST COMPLETED    : 0.6 — Delete Reset Statistics button
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 0.6 — Delete Reset Statistics button
+  NEXT TO DO        : Step 0.7 — Delete dead setupTag pill in TimerView
   PHASE COMPLETE    : ❌ no
 ═══════════════════════════════════════════════════════════
 
@@ -29,7 +29,7 @@ STEP CHECKLIST:
   [x] 0.3  Delete categoriesDidChange notif     (NotificationDelegate.swift)
   [x] 0.4  Remove categoryId from session       (Models.swift + 2 refs in TimerViewModel)
   [x] 0.5  Trim AppTheme to actually-used props (Models.swift)
-  [ ] 0.6  Delete "Reset Statistics" button     (SettingsView.swift)
+  [x] 0.6  Delete "Reset Statistics" button     (SettingsView.swift)
   [ ] 0.7  Delete dead setupTag pill            (TimerView.swift header)
   [ ] 0.8  Add real unit tests                  (ForcingFunctionTests.swift)
   [ ] 0.9  Final verification + tag phase done  (xcodebuild + git tag phase-0-done)
