@@ -16,9 +16,9 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 3 — Split TimerViewModel
   PHASE STARTED     : 2026-05-08
-  LAST COMPLETED    : 3.5 — Introduce `FocusSessionStore` facade + rewire views
+  LAST COMPLETED    : 3.6 — Protocol-front coordinators (notifications/live activity/bg/widget)
   CURRENTLY ON      : (none)
-  NEXT TO DO        : 3.6 — Protocol-front coordinators (notifications/live activity/bg/widget)
+  NEXT TO DO        : 3.7 — Delete or shrink `TimerViewModel` (≤ 200 LOC composer)
   PHASE COMPLETE    : ⛔️ no
 ═══════════════════════════════════════════════════════════
 
@@ -30,7 +30,7 @@ STEP CHECKLIST:
   [x] 3.3  Introduce `SessionRecorder` actor (repo writes)
   [x] 3.4  Formalize `PomodoroCoordinator` + wire existing modes
   [x] 3.5  Introduce `FocusSessionStore` facade + rewire views
-  [ ] 3.6  Protocol-front coordinators (notifications/live activity/bg/widget)
+  [x] 3.6  Protocol-front coordinators (notifications/live activity/bg/widget)
   [ ] 3.7  Delete or shrink `TimerViewModel` (≤ 200 LOC composer)
   [ ] 3.8  Fix Live Activity push-token leak (audit noted in roadmap)
   [ ] 3.9  Final verification + tag phase done

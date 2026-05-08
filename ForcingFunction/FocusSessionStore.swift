@@ -58,6 +58,10 @@ final class FocusSessionStore: ObservableObject {
     private let statePersistence = TimerStatePersistence()
     private let sessionRecorder = SessionRecorder(dataStore: .shared)
     private let pomodoroCoordinator = PomodoroCoordinator()
+    private let notificationCoordinator: NotificationCoordinator
+    private let liveActivityCoordinator: LiveActivityCoordinator
+    private let backgroundTaskCoordinator: BackgroundTaskCoordinator
+    private let widgetSyncCoordinator: WidgetSyncCoordinator
     private var cancellables = Set<AnyCancellable>()
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
@@ -135,7 +139,17 @@ final class FocusSessionStore: ObservableObject {
     }
     
     // MARK: - Initialization
-    init() {
+    init(
+        notificationCoordinator: NotificationCoordinator = DefaultNotificationCoordinator(),
+        liveActivityCoordinator: LiveActivityCoordinator = DefaultLiveActivityCoordinator(),
+        backgroundTaskCoordinator: BackgroundTaskCoordinator = DefaultBackgroundTaskCoordinator(),
+        widgetSyncCoordinator: WidgetSyncCoordinator = DefaultWidgetSyncCoordinator()
+    ) {
+        self.notificationCoordinator = notificationCoordinator
+        self.liveActivityCoordinator = liveActivityCoordinator
+        self.backgroundTaskCoordinator = backgroundTaskCoordinator
+        self.widgetSyncCoordinator = widgetSyncCoordinator
+
         // Migration: Reset to 0 if this is first launch with new range system
         // or if pomodoroMinutes is in the old range (5-25 minutes)
         if !hasMigratedToNewRange || (pomodoroMinutes >= 5 && pomodoroMinutes <= 25) {
@@ -166,7 +180,7 @@ final class FocusSessionStore: ObservableObject {
             }
             dailyFocusGoalMinutes = min(24 * 60, max(0, migrated))
             hasMigratedToSingleDailyGoal = true
-            WidgetDataManager.shared.updateWidgetData()
+            widgetSyncCoordinator.updateWidgetData()
         }
         
         // Ensure selectedMinutes doesn't exceed the current supported dial range.
@@ -270,7 +284,7 @@ final class FocusSessionStore: ObservableObject {
             
             // Resume: Update Live Activity to running state (if enabled)
             if liveActivitiesEnabled {
-                liveActivityManager.updateActivity(
+                liveActivityCoordinator.update(
                     remainingSeconds: remainingSeconds,
                     timerState: .running,
                     sessionType: currentSessionType,
@@ -306,7 +320,7 @@ final class FocusSessionStore: ObservableObject {
             
             // Start Live Activity for new session (if enabled)
             if liveActivitiesEnabled {
-                liveActivityManager.startActivity(
+                liveActivityCoordinator.start(
                     sessionId: newSession.id,
                     sessionType: currentSessionType,
                     totalDurationSeconds: engine.originalDurationSeconds,
@@ -328,7 +342,7 @@ final class FocusSessionStore: ObservableObject {
         
         // Start background task for Live Activity updates (if enabled)
         if liveActivitiesEnabled {
-            backgroundTaskManager.startBackgroundUpdates { [weak self] in
+            backgroundTaskCoordinator.startBackgroundUpdates { [weak self] in
                 guard let self = self, self.timerState == .running else { return }
                 self.updateLiveActivityInBackground()
             }
@@ -357,11 +371,11 @@ final class FocusSessionStore: ObservableObject {
         }
         
         // Stop background updates when paused
-        backgroundTaskManager.stopBackgroundUpdates()
+        backgroundTaskCoordinator.stopBackgroundUpdates()
         
         // Update Live Activity to paused state (if enabled)
         if liveActivitiesEnabled {
-            liveActivityManager.updateActivity(
+            liveActivityCoordinator.update(
                 remainingSeconds: remainingSeconds,
                 timerState: .paused,
                 sessionType: currentSessionType,
@@ -392,11 +406,11 @@ final class FocusSessionStore: ObservableObject {
         cancelNotification()
         
         // Stop background updates
-        backgroundTaskManager.stopBackgroundUpdates()
+        backgroundTaskCoordinator.stopBackgroundUpdates()
         
         // End Live Activity (if enabled)
         if liveActivitiesEnabled {
-            liveActivityManager.endActivity()
+            liveActivityCoordinator.end()
         }
         
         // Clear saved timer state
@@ -434,7 +448,7 @@ final class FocusSessionStore: ObservableObject {
                 await MainActor.run {
                     if completed?.sessionType == .work {
                         self.loadStatistics()
-                        WidgetDataManager.shared.updateWidgetData()
+                        self.widgetSyncCoordinator.updateWidgetData()
                     }
                     self.currentSession = nil
                 }
@@ -477,11 +491,11 @@ final class FocusSessionStore: ObservableObject {
         cancelNotification()
         
         // Stop background updates
-        backgroundTaskManager.stopBackgroundUpdates()
+        backgroundTaskCoordinator.stopBackgroundUpdates()
         
         // End Live Activity (if enabled)
         if liveActivitiesEnabled {
-            liveActivityManager.endActivity()
+            liveActivityCoordinator.end()
         }
         
         // Clear saved timer state (but keep completion flag)
@@ -581,7 +595,7 @@ final class FocusSessionStore: ObservableObject {
         
         // Update Live Activity (if enabled)
         if liveActivitiesEnabled, let startTime = engine.startTime {
-            liveActivityManager.updateActivity(
+            liveActivityCoordinator.update(
                 remainingSeconds: remainingSeconds,
                 timerState: .running,
                 sessionType: currentSessionType,
@@ -602,7 +616,7 @@ final class FocusSessionStore: ObservableObject {
         
         let calculatedRemaining = engine.calculateRemainingSeconds(now: Date())
         
-        liveActivityManager.updateActivity(
+        liveActivityCoordinator.update(
             remainingSeconds: calculatedRemaining,
             timerState: .running,
             sessionType: currentSessionType,
@@ -668,7 +682,7 @@ final class FocusSessionStore: ObservableObject {
             scheduleNotification()
             
             // Restart background updates
-            backgroundTaskManager.startBackgroundUpdates { [weak self] in
+            backgroundTaskCoordinator.startBackgroundUpdates { [weak self] in
                 guard let self = self, self.engine.timerState == .running else { return }
                 self.updateLiveActivityInBackground()
             }
@@ -724,28 +738,14 @@ final class FocusSessionStore: ObservableObject {
     }
     
     private func scheduleNotification() {
-        let center = UNUserNotificationCenter.current()
-        center.removeAllPendingNotificationRequests()
-        
-        let content = UNMutableNotificationContent()
-        content.title = "Session complete"
-        content.body = currentSessionType == .work
-            ? "Focus session complete. Take a break."
-            : "Break over. Ready for the next session?"
-        content.sound = .default
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(remainingSeconds), repeats: false)
-        let request = UNNotificationRequest(identifier: "pomodoro-timer", content: content, trigger: trigger)
-        
-        center.add(request) { error in
-            if let error = error {
-                print("Notification scheduling error: \(error)")
-            }
-        }
+        notificationCoordinator.scheduleCompletionNotification(
+            remainingSeconds: remainingSeconds,
+            sessionType: currentSessionType
+        )
     }
     
     private func cancelNotification() {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        notificationCoordinator.cancelAllPendingNotifications()
     }
     
     // MARK: - Settings Updates
@@ -813,13 +813,13 @@ final class FocusSessionStore: ObservableObject {
             updateIdleTimerForSession()
             startTimerTicking()
             scheduleNotification()
-            backgroundTaskManager.startBackgroundUpdates { [weak self] in
+            backgroundTaskCoordinator.startBackgroundUpdates { [weak self] in
                 guard let self, self.engine.timerState == .running else { return }
                 self.updateLiveActivityInBackground()
             }
             ensureCurrentSessionExists()
             if liveActivitiesEnabled, let session = currentSession, let startTime = engine.startTime {
-                liveActivityManager.reconnectOrStartActivity(
+                liveActivityCoordinator.reconnectOrStart(
                     sessionId: session.id,
                     sessionType: currentSessionType,
                     totalDurationSeconds: engine.originalDurationSeconds,
@@ -833,7 +833,7 @@ final class FocusSessionStore: ObservableObject {
             updateIdleTimerForSession()
             ensureCurrentSessionExists()
             if liveActivitiesEnabled, let session = currentSession, let startTime = engine.startTime {
-                liveActivityManager.reconnectOrStartActivity(
+                liveActivityCoordinator.reconnectOrStart(
                     sessionId: session.id,
                     sessionType: currentSessionType,
                     totalDurationSeconds: engine.originalDurationSeconds,
@@ -842,8 +842,8 @@ final class FocusSessionStore: ObservableObject {
                     pausedDuration: engine.pausedDuration,
                     timerState: .paused
                 )
-            } else if liveActivitiesEnabled, liveActivityManager.hasActiveActivity, let startTime = engine.startTime {
-                liveActivityManager.updateActivity(
+            } else if liveActivitiesEnabled, liveActivityCoordinator.hasActiveActivity, let startTime = engine.startTime {
+                liveActivityCoordinator.update(
                     remainingSeconds: remainingSeconds,
                     timerState: .paused,
                     sessionType: currentSessionType,
