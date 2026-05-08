@@ -67,78 +67,96 @@ struct SettingsView: View {
                     .listRowBackground(HC.card)
                     .listRowSeparatorTint(HC.line)
                     
-                    Section(header: sectionHeader("Session Durations")) {
-                        HStack {
-                            Text("Pomodoro Length")
-                                .font(HC.text(16))
-                                .foregroundStyle(HC.ink)
-                            Spacer()
-                            Picker("", selection: $viewModel.pomodoroMinutes) {
-                                ForEach(pomodoroMinutesOptions, id: \.self) { minutes in
-                                    Text("\(Int(minutes)) min").tag(minutes)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .foregroundStyle(HC.red)
-                            .onChange(of: viewModel.pomodoroMinutes) { _, _ in
-                                viewModel.updateSettings()
+                    Section(header: sectionHeader("Pomodoro Technique")) {
+                        Toggle(isOn: $viewModel.strictPomodoroMode) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Strict mode")
+                                    .font(HC.text(16))
+                                    .foregroundStyle(HC.ink)
+                                Text("Enforces 4-pomodoro cycle with long breaks.")
+                                    .font(HC.text(12))
+                                    .foregroundStyle(HC.muted)
                             }
                         }
-                        
-                        HStack {
-                            Text("Short Break")
-                                .font(HC.text(16))
-                                .foregroundStyle(HC.ink)
-                            Spacer()
-                            Picker("", selection: $viewModel.shortBreakMinutes) {
-                                ForEach(1...30, id: \.self) { minutes in
-                                    Text("\(minutes) min").tag(Double(minutes))
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .foregroundStyle(HC.red)
-                            .onChange(of: viewModel.shortBreakMinutes) { _, _ in
-                                viewModel.updateSettings()
-                            }
-                        }
-                        
-                        HStack {
-                            Text("Long Break")
-                                .font(HC.text(16))
-                                .foregroundStyle(HC.ink)
-                            Spacer()
-                            Picker("", selection: $viewModel.longBreakMinutes) {
-                                ForEach(5...60, id: \.self) { minutes in
-                                    Text("\(minutes) min").tag(Double(minutes))
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .foregroundStyle(HC.red)
-                            .onChange(of: viewModel.longBreakMinutes) { _, _ in
-                                viewModel.updateSettings()
-                            }
-                        }
+                        .tint(HC.red)
                     }
                     .listRowBackground(HC.card)
                     .listRowSeparatorTint(HC.line)
-                    
-                    Section(header: sectionHeader("Pomodoro Cycle")) {
-                        HStack {
-                            Text("Pomodoros Before Long Break")
-                                .font(HC.text(16))
-                                .foregroundStyle(HC.ink)
-                            Spacer()
-                            Picker("", selection: $viewModel.pomodorosBeforeLongBreak) {
-                                ForEach(1...10, id: \.self) { count in
-                                    Text("\(count)").tag(count)
+
+                    if viewModel.strictPomodoroMode {
+                        Section(header: sectionHeader("Session Durations")) {
+                            HStack {
+                                Text("Pomodoro Length")
+                                    .font(HC.text(16))
+                                    .foregroundStyle(HC.ink)
+                                Spacer()
+                                Picker("", selection: $viewModel.pomodoroMinutes) {
+                                    ForEach(pomodoroMinutesOptions, id: \.self) { minutes in
+                                        Text("\(Int(minutes)) min").tag(minutes)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .foregroundStyle(HC.red)
+                                .onChange(of: viewModel.pomodoroMinutes) { _, _ in
+                                    viewModel.updateSettings()
                                 }
                             }
-                            .pickerStyle(.menu)
-                            .foregroundStyle(HC.red)
+
+                            HStack {
+                                Text("Short Break")
+                                    .font(HC.text(16))
+                                    .foregroundStyle(HC.ink)
+                                Spacer()
+                                Picker("", selection: $viewModel.shortBreakMinutes) {
+                                    ForEach(1...30, id: \.self) { minutes in
+                                        Text("\(minutes) min").tag(Double(minutes))
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .foregroundStyle(HC.red)
+                                .onChange(of: viewModel.shortBreakMinutes) { _, _ in
+                                    viewModel.updateSettings()
+                                }
+                            }
+
+                            HStack {
+                                Text("Long Break")
+                                    .font(HC.text(16))
+                                    .foregroundStyle(HC.ink)
+                                Spacer()
+                                Picker("", selection: $viewModel.longBreakMinutes) {
+                                    ForEach(5...60, id: \.self) { minutes in
+                                        Text("\(minutes) min").tag(Double(minutes))
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .foregroundStyle(HC.red)
+                                .onChange(of: viewModel.longBreakMinutes) { _, _ in
+                                    viewModel.updateSettings()
+                                }
+                            }
                         }
+                        .listRowBackground(HC.card)
+                        .listRowSeparatorTint(HC.line)
+
+                        Section(header: sectionHeader("Pomodoro Cycle")) {
+                            HStack {
+                                Text("Pomodoros Before Long Break")
+                                    .font(HC.text(16))
+                                    .foregroundStyle(HC.ink)
+                                Spacer()
+                                Picker("", selection: $viewModel.pomodorosBeforeLongBreak) {
+                                    ForEach(1...10, id: \.self) { count in
+                                        Text("\(count)").tag(count)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .foregroundStyle(HC.red)
+                            }
+                        }
+                        .listRowBackground(HC.card)
+                        .listRowSeparatorTint(HC.line)
                     }
-                    .listRowBackground(HC.card)
-                    .listRowSeparatorTint(HC.line)
                     
                     Section(header: sectionHeader("Focus Goal")) {
                         Text("How long you want to focus each day. The main timer and home widget use this as today's target.")

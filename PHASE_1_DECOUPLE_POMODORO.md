@@ -13,9 +13,9 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 1 — Decouple Pomodoro
   PHASE STARTED     : 2026-05-08
-  LAST COMPLETED    : Step 1.4 — Strip Pomodoro chrome from TimerView header
+  LAST COMPLETED    : Step 1.5 — Gate strict-mode-only Settings behind toggle
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 1.5 — Gate strict-mode-only Settings behind toggle
+  NEXT TO DO        : Step 1.6 — Final verification + tag phase done
   PHASE COMPLETE    : ❌ no
 ═══════════════════════════════════════════════════════════
 
@@ -24,7 +24,7 @@
 [x] 1.2  Add strictPomodoroMode flag + gate cycle logic
 [x] 1.3  Humanize notification body
 [x] 1.4  Strip Pomodoro chrome from TimerView header
-[ ] 1.5  Gate strict-mode-only Settings behind toggle
+[x] 1.5  Gate strict-mode-only Settings behind toggle
 [ ] 1.6  Final verification + tag phase done
 ```
 
