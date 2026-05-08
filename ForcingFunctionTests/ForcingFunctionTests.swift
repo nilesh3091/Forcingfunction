@@ -7,6 +7,7 @@
 
 import Testing
 import Foundation
+import SwiftData
 @testable import ForcingFunction
 
 // MARK: - PomodoroSession.activeDurationMinutes
@@ -126,5 +127,123 @@ struct WeekBoundaryTests {
         //   inject without refactoring. Marked as a smoke test for now;
         //   Phase 2 will inject a clock and replace this with strict assertions.
         _ = wed   // silence warning
+    }
+}
+
+// MARK: - SwiftDataFocusRepository
+
+@Suite("SwiftDataFocusRepository")
+struct SwiftDataFocusRepositoryTests {
+    @Test func upsertAndFetchProjectsTagsSessions() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: SDProject.self,
+            SDProjectTag.self,
+            SDFocusSession.self,
+            SDSessionEventRecord.self,
+            configurations: config
+        )
+        let repo: any FocusRepository = SwiftDataFocusRepository(container: container)
+
+        let projectId = UUID()
+        try repo.upsertProject(
+            id: projectId,
+            name: "Test Project",
+            colorRaw: CategoryColor.teal.rawValue,
+            goalHours: 42,
+            createdDate: Date(timeIntervalSince1970: 10),
+            isArchived: false
+        )
+
+        let projects = try repo.fetchProjects(includeArchived: true)
+        #expect(projects.count == 1)
+        #expect(projects.first?.id == projectId)
+
+        let parentTagId = UUID()
+        let childTagId = UUID()
+        try repo.upsertTag(
+            id: parentTagId,
+            name: "Parent",
+            createdDate: Date(timeIntervalSince1970: 20),
+            projectId: projectId,
+            parentId: nil
+        )
+        try repo.upsertTag(
+            id: childTagId,
+            name: "Child",
+            createdDate: Date(timeIntervalSince1970: 21),
+            projectId: projectId,
+            parentId: parentTagId
+        )
+
+        let tags = try repo.fetchProjectTags(projectId: projectId)
+        #expect(tags.count == 2)
+
+        let sessionId = UUID()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let end = Date(timeIntervalSince1970: 1_600)
+        try repo.upsertSession(
+            id: sessionId,
+            startTime: start,
+            endTime: end,
+            plannedMinutes: 25,
+            statusRaw: SessionStatus.completed.rawValue,
+            kindRaw: SessionType.work.rawValue,
+            title: "Deep work",
+            projectId: projectId,
+            tagId: childTagId,
+            events: [
+                SessionEvent(timestamp: start, eventType: .started),
+                SessionEvent(timestamp: end, eventType: .completed)
+            ]
+        )
+
+        let sessions = try repo.fetchSessions(in: DateInterval(start: .distantPast, end: .distantFuture))
+        #expect(sessions.count == 1)
+        #expect(sessions.first?.id == sessionId)
+        #expect(sessions.first?.project?.id == projectId)
+    }
+
+    @Test func deleteSessionAndProject() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: SDProject.self,
+            SDProjectTag.self,
+            SDFocusSession.self,
+            SDSessionEventRecord.self,
+            configurations: config
+        )
+        let repo: any FocusRepository = SwiftDataFocusRepository(container: container)
+
+        let projectId = UUID()
+        let sessionId = UUID()
+
+        try repo.upsertProject(
+            id: projectId,
+            name: "To Delete",
+            colorRaw: CategoryColor.red.rawValue,
+            goalHours: 1,
+            createdDate: Date(),
+            isArchived: false
+        )
+
+        try repo.upsertSession(
+            id: sessionId,
+            startTime: Date(timeIntervalSince1970: 0),
+            endTime: Date(timeIntervalSince1970: 60),
+            plannedMinutes: 1,
+            statusRaw: SessionStatus.completed.rawValue,
+            kindRaw: SessionType.work.rawValue,
+            title: nil,
+            projectId: projectId,
+            tagId: nil,
+            events: []
+        )
+
+        try repo.deleteSession(id: sessionId)
+        #expect(try repo.fetchSessions(in: DateInterval(start: .distantPast, end: .distantFuture)).isEmpty)
+
+        try repo.deleteProject(id: projectId)
+        #expect(try repo.fetchProjects(includeArchived: true).isEmpty)
     }
 }
