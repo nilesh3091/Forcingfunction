@@ -4,6 +4,29 @@ You are working on **ForcingFunction**, an iOS Pomodoro app being refactored tow
 
 ---
 
+## 🛑 STEP ZERO — RUN BEFORE ANYTHING ELSE
+
+**The Claude Desktop app spawns each new session inside an isolated git worktree under `.claude/worktrees/<random-name>/`. Files written there are invisible to other sessions and to the user's main repo. This silently breaks every multi-session plan if not handled.**
+
+Before reading anything else, do this:
+
+```bash
+pwd
+```
+
+If the output contains `.claude/worktrees/`, you are in an isolated worktree. **Immediately switch to the main repo:**
+
+```bash
+cd "/Users/niles/Library/Mobile Documents/com~apple~CloudDocs/Projects/ForcingFunction"
+pwd   # confirm path no longer contains ".claude/worktrees/"
+```
+
+**All file reads, edits, commits, and planning-doc updates from this point on MUST happen at the main repo path above.** Never write inside `.claude/worktrees/*`. If a later tool call lands you back in a worktree path (cwd resets), `cd` back to the main repo path first.
+
+If `cd` to the main repo fails, STOP and tell the user. Do not invent a path.
+
+---
+
 ## ⚡ FAST ANSWER: "Where were we / what's next?"
 
 When the user asks any variant of "where were we", "what's next", "what phase are we on", or "continue":
@@ -60,42 +83,52 @@ If any of these happen, STOP and ask the user before proceeding:
 
 ---
 
-## 🔧 STANDARD VERIFICATION COMMANDS
+## 🔧 VERIFICATION POLICY (LEAN — DO NOT OVER-VERIFY)
 
-Run these from the repo root. Use them as instructed in each step.
+**The bare-minimum gate per step:**
 
 ```bash
-# Build (verifies compilation; fast)
+# Build only — fast, no simulator boot.
 xcodebuild build \
   -project ForcingFunction.xcodeproj \
   -scheme ForcingFunction \
   -destination 'generic/platform=iOS Simulator' \
   -quiet
+```
 
-# Run unit tests (needs a real simulator)
-xcodebuild test \
-  -project ForcingFunction.xcodeproj \
-  -scheme ForcingFunction \
-  -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
-  -quiet
-# If "iPhone 15" is unavailable, run `xcrun simctl list devices available | grep iPhone`
-# and substitute an available simulator name.
+**`xcodebuild test` runs ONCE per phase, at the end** — not per step. Booting a simulator costs minutes and can hang; don't pay that cost ten times per phase.
 
-# Verify a symbol/string is unused before deleting it
+**Manual / simulator UI smoke tests are NEVER run by the AI agent.** If the user wants to manually poke the app, they will. Do not boot the simulator app, do not navigate the UI, do not "verify by clicking." Trust the build + tests + greps.
+
+**Greps before deletions are mandatory** (cheap, prevents disasters):
+```bash
 grep -rn "SymbolName" --include='*.swift' .
 ```
+
+That's the entire verification toolkit. Anything beyond this is over-engineering.
+
+---
+
+## ✂️ DOCUMENT BREVITY RULE (applies to all future phase files)
+
+Future `PHASE_N_*.md` files must be **terse**:
+- Target ≤ 300 lines per phase doc (Phase 0 was 750 — too long).
+- Per-step section: ~10–25 lines, not 60+. Just: goal, files, action, single grep/build verify, commit message.
+- No "tip" callouts, no prose explanations of why a step exists, no per-step rollback prose (one global rollback section at the bottom).
+- No per-step "Stop & ask" sub-section — one global list at the top of the phase.
+- No "manual smoke test" sections, ever.
+
+If a phase doc starts ballooning past ~300 lines, stop and ask the user whether to split it.
 
 ---
 
 ## 📋 PROGRESS TRACKING PROTOCOL (every step, every phase)
 
 Before starting any step:
-1. Re-read the step's full instructions in the active phase file.
-2. Update the `📍 CURRENT STATUS` block: change the step's `[ ]` to `[~]` (in progress).
-3. Commit that status update alone with message: `chore: start phase N step X`.
+1. Update the `📍 CURRENT STATUS` block: change the step's `[ ]` to `[~]` (in progress). No separate commit for this — fold it into the step's commit.
 
 After completing any step:
-1. Run the verification commands the step requires. **They must all pass.**
+1. Run `xcodebuild build` + the step's grep checks. They must pass.
 2. Update the `📍 CURRENT STATUS` block: change `[~]` to `[x]` (done).
 3. Update "Last completed step" and "Next step" lines.
 4. Commit your changes with the message format from the step.

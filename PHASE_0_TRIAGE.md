@@ -14,25 +14,25 @@
 ```
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 0 — Triage & Honesty
-  PHASE STARTED     : (not yet)
-  LAST COMPLETED    : (none)
+  PHASE STARTED     : 2026-05-07
+  LAST COMPLETED    : 0.9 — Final verification + tag phase done
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 0.0 — Setup & baseline
-  PHASE COMPLETE    : ❌ no
+  NEXT TO DO        : Phase 1 — see PHASE_1_DECOUPLE_POMODORO.md (start at Step 1.0)
+  PHASE COMPLETE    : ✅ yes
 ═══════════════════════════════════════════════════════════
 
 STEP CHECKLIST:
 
-  [ ] 0.0  Setup & baseline                     (verify env, create branch)
-  [ ] 0.1  Delete Item.swift                    (dead SwiftData artifact)
-  [ ] 0.2  Delete dead model code               (Category + PomodoroTask in Models.swift)
-  [ ] 0.3  Delete categoriesDidChange notif     (NotificationDelegate.swift)
-  [ ] 0.4  Remove categoryId from session       (Models.swift + 2 refs in TimerViewModel)
-  [ ] 0.5  Trim AppTheme to actually-used props (Models.swift)
-  [ ] 0.6  Delete "Reset Statistics" button     (SettingsView.swift)
-  [ ] 0.7  Delete dead setupTag pill            (TimerView.swift header)
-  [ ] 0.8  Add real unit tests                  (ForcingFunctionTests.swift)
-  [ ] 0.9  Final verification + tag phase done  (xcodebuild + git tag phase-0-done)
+  [x] 0.0  Setup & baseline                     (verify env, create branch)
+  [x] 0.1  Delete Item.swift                    (dead SwiftData artifact)
+  [x] 0.2  Delete dead model code               (Category + PomodoroTask in Models.swift)
+  [x] 0.3  Delete categoriesDidChange notif     (NotificationDelegate.swift)
+  [x] 0.4  Remove categoryId from session       (Models.swift + 2 refs in TimerViewModel)
+  [x] 0.5  Trim AppTheme to actually-used props (Models.swift)
+  [x] 0.6  Delete "Reset Statistics" button     (SettingsView.swift)
+  [x] 0.7  Delete dead setupTag pill            (TimerView.swift header)
+  [x] 0.8  Add real unit tests                  (ForcingFunctionTests.swift)
+  [x] 0.9  Final verification + tag phase done  (xcodebuild + git tag phase-0-done)
 
 LEGEND:  [ ] not started   [~] in progress   [x] done   [-] skipped (with reason)
 ```
