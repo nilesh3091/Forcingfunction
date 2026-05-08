@@ -11,84 +11,20 @@ class PomodoroDataStore {
     static let shared = PomodoroDataStore()
 
     /// Phase 2: once configured, persistence is backed by SwiftData via `FocusRepository`.
-    /// Until configured, legacy JSON persistence remains in place.
     static func configureShared(repository: any FocusRepository) {
         shared.repository = repository
         shared.loadFromRepository()
     }
-    
-    private let fileName = "pomodoro_sessions.json"
     private var sessions: [PomodoroSession] = []
     private var repository: (any FocusRepository)?
     
     private init() {
-        loadSessions()
     }
     
-    // MARK: - File Management
-    
-    private var fileURL: URL {
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return documentsDirectory.appendingPathComponent(fileName)
-    }
-    
-    // MARK: - Load Sessions
-    
-    /// Load all sessions from disk
+    /// Phase 2: app code no longer reads/writes legacy JSON.
+    /// Sessions are loaded from SwiftData once `configureShared(repository:)` is called.
     func loadSessions() {
-        if repository != nil {
-            loadFromRepository()
-            return
-        }
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            sessions = []
-            return
-        }
-        
-        do {
-            let data = try Data(contentsOf: fileURL)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            sessions = try decoder.decode([PomodoroSession].self, from: data)
-            
-            let beforeCount = sessions.count
-            sessions.removeAll { session in
-                guard session.sessionType == .work, session.status == .cancelled else { return false }
-                // Keep short cancelled sessions if the user intentionally set a short timer
-                guard session.plannedDurationMinutes > PomodoroSession.minimumRecordedWorkMinutes else { return false }
-                let minutes = session.billedMinutes
-                return minutes < PomodoroSession.minimumRecordedWorkMinutes
-            }
-            if sessions.count != beforeCount {
-                saveSessions()
-            }
-            
-            // Sort by start time (most recent first)
-            sessions.sort { $0.startTime > $1.startTime }
-        } catch {
-            print("Error loading pomodoro sessions: \(error)")
-            sessions = []
-        }
-    }
-    
-    // MARK: - Save Sessions
-    
-    /// Save all sessions to disk
-    @discardableResult
-    private func saveSessions() -> Bool {
-        // Legacy JSON path only. SwiftData-backed calls persist per-operation.
-        guard repository == nil else { return true }
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(sessions)
-            try data.write(to: fileURL, options: .atomic)
-            return true
-        } catch {
-            print("Error saving pomodoro sessions: \(error)")
-            return false
-        }
+        loadFromRepository()
     }
     
     // MARK: - Session Management
@@ -201,8 +137,6 @@ class PomodoroDataStore {
         sessions.removeAll { $0.id == id }
         if let repository {
             do { try repository.deleteSession(id: id) } catch { print("PomodoroDataStore: deleteSession repo error — \(error)") }
-        } else {
-            saveSessions()
         }
     }
     
@@ -214,8 +148,6 @@ class PomodoroDataStore {
             for id in idsToDelete {
                 do { try repository.deleteSession(id: id) } catch { print("PomodoroDataStore: deleteSession repo error — \(error)") }
             }
-        } else {
-            saveSessions()
         }
     }
     
@@ -318,8 +250,6 @@ class PomodoroDataStore {
             } catch {
                 print("PomodoroDataStore: upsertSession repo error — \(error)")
             }
-        } else {
-            saveSessions()
         }
     }
 }

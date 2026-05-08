@@ -47,10 +47,10 @@ struct ForcingFunctionApp: App {
 
         focusRepository = SwiftDataFocusRepository(container: modelContainer)
 
+        LegacyJSONToSwiftDataMigrator(container: modelContainer, repository: focusRepository).migrateIfNeeded()
+
         PomodoroDataStore.configureShared(repository: focusRepository)
         ProjectStore.configureShared(repository: focusRepository)
-
-        LegacyJSONToSwiftDataMigrator(container: modelContainer, repository: focusRepository).migrateIfNeeded()
 
         // Initialize widget data on app launch
         WidgetDataManager.shared.updateWidgetData()
@@ -118,7 +118,7 @@ private struct LegacyJSONToSwiftDataMigrator {
     private func readLegacyProjects() throws -> [Project] {
         let url = legacyDocumentsURL(fileName: "projects.json")
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let data = try Data(contentsOf: url)
+        let data = try readFileData(url: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode([Project].self, from: data)
@@ -127,7 +127,7 @@ private struct LegacyJSONToSwiftDataMigrator {
     private func readLegacySessions() throws -> [PomodoroSession] {
         let url = legacyDocumentsURL(fileName: "pomodoro_sessions.json")
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let data = try Data(contentsOf: url)
+        let data = try readFileData(url: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode([PomodoroSession].self, from: data)
@@ -192,5 +192,11 @@ private struct LegacyJSONToSwiftDataMigrator {
     private func legacyDocumentsURL(fileName: String) -> URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(fileName)
+    }
+
+    private func readFileData(url: URL) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        return try handle.readToEnd() ?? Data()
     }
 }

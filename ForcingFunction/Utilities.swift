@@ -175,6 +175,7 @@ protocol FocusRepository: Sendable {
     ) throws
 
     func deleteSession(id: UUID) throws
+    func deleteProject(id: UUID) throws
     func deleteAllProjects() throws
     func deleteAllSessions() throws
 }
@@ -377,6 +378,14 @@ final class SwiftDataFocusRepository: FocusRepository {
         for p in projects { ctx.delete(p) }
         try ctx.save()
     }
+
+    func deleteProject(id: UUID) throws {
+        let ctx = context()
+        if let project = try ctx.fetch(FetchDescriptor<SDProject>(predicate: #Predicate { $0.id == id })).first {
+            ctx.delete(project)
+            try ctx.save()
+        }
+    }
 }
 
 private struct UnconfiguredFocusRepository: FocusRepository {
@@ -387,6 +396,7 @@ private struct UnconfiguredFocusRepository: FocusRepository {
     func upsertTag(id: UUID, name: String, createdDate: Date, projectId: UUID?, parentId: UUID?) throws {}
     func upsertSession(id: UUID, startTime: Date, endTime: Date?, plannedMinutes: Double, statusRaw: String, kindRaw: String, title: String?, projectId: UUID?, tagId: UUID?, events: [SessionEvent]) throws {}
     func deleteSession(id: UUID) throws {}
+    func deleteProject(id: UUID) throws {}
     func deleteAllProjects() throws {}
     func deleteAllSessions() throws {}
 }

@@ -14,13 +14,6 @@ class ProjectStore: ObservableObject {
     @Published private(set) var projects: [Project] = []
     private var repository: (any FocusRepository)?
 
-    private let fileName = "projects.json"
-
-    private var fileURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(fileName)
-    }
-
     private init() {
         load()
     }
@@ -32,35 +25,10 @@ class ProjectStore: ObservableObject {
             loadFromRepository(repository: repository)
             return
         }
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            projects = []
-            return
-        }
-        do {
-            let data = try Data(contentsOf: fileURL)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            projects = try decoder.decode([Project].self, from: data)
-                .sorted { $0.createdDate < $1.createdDate }
-        } catch {
-            print("ProjectStore: load error — \(error)")
-            projects = []
-        }
+        projects = []
     }
 
-    private func save() {
-        // Legacy JSON path only. SwiftData-backed calls persist per-operation.
-        guard repository == nil else { return }
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(projects)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            print("ProjectStore: save error — \(error)")
-        }
-    }
+    // Phase 2: app code no longer reads/writes legacy JSON.
 
     // MARK: - Project CRUD
 
@@ -77,8 +45,14 @@ class ProjectStore: ObservableObject {
 
     func delete(id: UUID) {
         projects.removeAll { $0.id == id }
-        // Phase 2: sessions are nullified by relationship in SwiftData model; delete of project itself is not yet exposed here.
-        save()
+        if let repository {
+            do {
+                try repository.deleteProject(id: id)
+                loadFromRepository(repository: repository)
+            } catch {
+                print("ProjectStore: deleteProject repo error — \(error)")
+            }
+        }
     }
 
     func archive(id: UUID) {
@@ -102,14 +76,14 @@ class ProjectStore: ObservableObject {
     func addTag(_ tag: ProjectTag, to projectId: UUID) {
         guard let idx = projects.firstIndex(where: { $0.id == projectId }) else { return }
         projects[idx].tags.append(tag)
-        save()
+        persistUpsert(projects[idx])
     }
 
     func updateTag(_ updated: ProjectTag, in projectId: UUID) {
         guard let pIdx = projects.firstIndex(where: { $0.id == projectId }),
               let tIdx = projects[pIdx].tags.firstIndex(where: { $0.id == updated.id }) else { return }
         projects[pIdx].tags[tIdx] = updated
-        save()
+        persistUpsert(projects[pIdx])
     }
 
     /// Deletes a tag and all its children from a project.
@@ -117,7 +91,7 @@ class ProjectStore: ObservableObject {
         guard let pIdx = projects.firstIndex(where: { $0.id == projectId }) else { return }
         // Remove children first, then the tag itself
         projects[pIdx].tags.removeAll { $0.parentId == tagId || $0.id == tagId }
-        save()
+        persistUpsert(projects[pIdx])
     }
 
     // MARK: - Stats
@@ -126,7 +100,7 @@ class ProjectStore: ObservableObject {
     func totalFocusMinutes(for projectId: UUID, in sessions: [PomodoroSession]) -> Double {
         sessions
             .filter { $0.projectId == projectId && $0.sessionType == .work }
-            .compactMap { $0.activeDurationMinutes }
+            .map(\.billedMinutes)
             .reduce(0, +)
     }
 
@@ -134,7 +108,7 @@ class ProjectStore: ObservableObject {
     func totalFocusMinutes(forTag tagId: UUID, in sessions: [PomodoroSession]) -> Double {
         sessions
             .filter { $0.projectTagId == tagId && $0.sessionType == .work }
-            .compactMap { $0.activeDurationMinutes }
+            .map(\.billedMinutes)
             .reduce(0, +)
     }
 
@@ -198,8 +172,6 @@ class ProjectStore: ObservableObject {
             } catch {
                 print("ProjectStore: persistUpsert repo error — \(error)")
             }
-        } else {
-            save()
         }
     }
 }
