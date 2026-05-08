@@ -47,6 +47,9 @@ struct ForcingFunctionApp: App {
 
         focusRepository = SwiftDataFocusRepository(container: modelContainer)
 
+        PomodoroDataStore.configureShared(repository: focusRepository)
+        ProjectStore.configureShared(repository: focusRepository)
+
         LegacyJSONToSwiftDataMigrator(container: modelContainer, repository: focusRepository).migrateIfNeeded()
 
         // Initialize widget data on app launch

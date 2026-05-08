@@ -9,9 +9,17 @@ import Foundation
 
 class PomodoroDataStore {
     static let shared = PomodoroDataStore()
+
+    /// Phase 2: once configured, persistence is backed by SwiftData via `FocusRepository`.
+    /// Until configured, legacy JSON persistence remains in place.
+    static func configureShared(repository: any FocusRepository) {
+        shared.repository = repository
+        shared.loadFromRepository()
+    }
     
     private let fileName = "pomodoro_sessions.json"
     private var sessions: [PomodoroSession] = []
+    private var repository: (any FocusRepository)?
     
     private init() {
         loadSessions()
@@ -28,6 +36,10 @@ class PomodoroDataStore {
     
     /// Load all sessions from disk
     func loadSessions() {
+        if repository != nil {
+            loadFromRepository()
+            return
+        }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             sessions = []
             return
@@ -64,6 +76,8 @@ class PomodoroDataStore {
     /// Save all sessions to disk
     @discardableResult
     private func saveSessions() -> Bool {
+        // Legacy JSON path only. SwiftData-backed calls persist per-operation.
+        guard repository == nil else { return true }
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
@@ -83,14 +97,14 @@ class PomodoroDataStore {
     func addSession(_ session: PomodoroSession) {
         sessions.append(session)
         sessions.sort { $0.startTime > $1.startTime }
-        saveSessions()
+        persistUpsert(session)
     }
     
     /// Update an existing session (e.g., when it's completed or paused)
     func updateSession(_ session: PomodoroSession) {
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
-            saveSessions()
+            persistUpsert(session)
         }
     }
     
@@ -193,14 +207,24 @@ class PomodoroDataStore {
     /// Delete a session by ID
     func deleteSession(byId id: UUID) {
         sessions.removeAll { $0.id == id }
-        saveSessions()
+        if let repository {
+            do { try repository.deleteSession(id: id) } catch { print("PomodoroDataStore: deleteSession repo error — \(error)") }
+        } else {
+            saveSessions()
+        }
     }
     
     /// Delete multiple sessions
     func deleteSessions(_ sessionsToDelete: [PomodoroSession]) {
         let idsToDelete = Set(sessionsToDelete.map { $0.id })
         sessions.removeAll { idsToDelete.contains($0.id) }
-        saveSessions()
+        if let repository {
+            for id in idsToDelete {
+                do { try repository.deleteSession(id: id) } catch { print("PomodoroDataStore: deleteSession repo error — \(error)") }
+            }
+        } else {
+            saveSessions()
+        }
     }
     
     /// Clean up orphaned sessions (running/paused sessions from previous app launches)
@@ -263,6 +287,47 @@ class PomodoroDataStore {
                 finalizeEndedSession(session)
                 print("Completed expired session: \(session.id) - elapsed: \(elapsedMinutes)min, planned: \(session.plannedDurationMinutes)min")
             }
+        }
+    }
+
+    // MARK: - SwiftData-backed persistence
+
+    private func loadFromRepository() {
+        guard let repository else { return }
+        do {
+            // Fetch a wide range; Phase 2 call sites still filter in-memory in places.
+            let interval = DateInterval(start: .distantPast, end: .distantFuture)
+            let records = try repository.fetchSessions(in: interval)
+            sessions = records.compactMap { record in
+                PomodoroSession(sd: record)
+            }
+            sessions.sort { $0.startTime > $1.startTime }
+        } catch {
+            print("PomodoroDataStore: loadFromRepository error — \(error)")
+            sessions = []
+        }
+    }
+
+    private func persistUpsert(_ session: PomodoroSession) {
+        if let repository {
+            do {
+                try repository.upsertSession(
+                    id: session.id,
+                    startTime: session.startTime,
+                    endTime: session.endTime,
+                    plannedMinutes: session.plannedDurationMinutes,
+                    statusRaw: session.status.rawValue,
+                    kindRaw: session.sessionType.rawValue,
+                    title: session.title,
+                    projectId: session.projectId,
+                    tagId: session.projectTagId,
+                    events: session.events
+                )
+            } catch {
+                print("PomodoroDataStore: upsertSession repo error — \(error)")
+            }
+        } else {
+            saveSessions()
         }
     }
 }

@@ -242,6 +242,32 @@ struct PomodoroSession: Codable, Identifiable {
     }
 }
 
+extension PomodoroSession {
+    init?(sd record: SDFocusSession) {
+        let kind = SessionType(rawValue: record.kindRaw) ?? .work
+        let status = SessionStatus(rawValue: record.statusRaw) ?? .running
+
+        let events: [SessionEvent] = record.events
+            .sorted(by: { $0.timestamp < $1.timestamp })
+            .map { SessionEvent(timestamp: $0.timestamp, eventType: EventType(rawValue: $0.typeRaw) ?? .started) }
+
+        self.init(
+            id: record.id,
+            sessionType: kind,
+            startTime: record.startTime,
+            endTime: record.endTime,
+            plannedDurationMinutes: record.plannedMinutes,
+            status: status,
+            events: events,
+            title: record.title,
+            tag: nil,
+            tagColor: nil,
+            projectId: record.project?.id,
+            projectTagId: record.tag?.id
+        )
+    }
+}
+
 // MARK: - Project Models
 
 /// A tag that belongs to a project. Two-level nesting: parentId == nil → top-level; otherwise sub-tag.

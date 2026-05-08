@@ -12,6 +12,7 @@ class ProjectStore: ObservableObject {
     static let shared = ProjectStore()
 
     @Published private(set) var projects: [Project] = []
+    private var repository: (any FocusRepository)?
 
     private let fileName = "projects.json"
 
@@ -27,6 +28,10 @@ class ProjectStore: ObservableObject {
     // MARK: - Persistence
 
     func load() {
+        if let repository {
+            loadFromRepository(repository: repository)
+            return
+        }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             projects = []
             return
@@ -44,6 +49,8 @@ class ProjectStore: ObservableObject {
     }
 
     private func save() {
+        // Legacy JSON path only. SwiftData-backed calls persist per-operation.
+        guard repository == nil else { return }
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
@@ -59,30 +66,31 @@ class ProjectStore: ObservableObject {
 
     func add(_ project: Project) {
         projects.append(project)
-        save()
+        persistUpsert(project)
     }
 
     func update(_ updated: Project) {
         guard let idx = projects.firstIndex(where: { $0.id == updated.id }) else { return }
         projects[idx] = updated
-        save()
+        persistUpsert(updated)
     }
 
     func delete(id: UUID) {
         projects.removeAll { $0.id == id }
+        // Phase 2: sessions are nullified by relationship in SwiftData model; delete of project itself is not yet exposed here.
         save()
     }
 
     func archive(id: UUID) {
         guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
         projects[idx].isArchived = true
-        save()
+        persistUpsert(projects[idx])
     }
 
     func unarchive(id: UUID) {
         guard let idx = projects.firstIndex(where: { $0.id == id }) else { return }
         projects[idx].isArchived = false
-        save()
+        persistUpsert(projects[idx])
     }
 
     func project(id: UUID) -> Project? {
@@ -134,5 +142,64 @@ class ProjectStore: ObservableObject {
 
     var activeProjects: [Project] {
         projects.filter { !$0.isArchived }
+    }
+
+    // MARK: - SwiftData-backed configuration
+
+    static func configureShared(repository: any FocusRepository) {
+        shared.repository = repository
+        shared.load()
+    }
+
+    private func loadFromRepository(repository: any FocusRepository) {
+        do {
+            let sdProjects = try repository.fetchProjects(includeArchived: true)
+            projects = sdProjects.map { p in
+                let tags: [ProjectTag] = p.tags.map { t in
+                    ProjectTag(id: t.id, name: t.name, parentId: t.parent?.id, createdDate: t.createdDate)
+                }
+                return Project(
+                    id: p.id,
+                    name: p.name,
+                    color: CategoryColor(rawValue: p.colorRaw) ?? .teal,
+                    goalHours: p.goalHours,
+                    tags: tags,
+                    createdDate: p.createdDate,
+                    isArchived: p.isArchived
+                )
+            }.sorted { $0.createdDate < $1.createdDate }
+        } catch {
+            print("ProjectStore: loadFromRepository error — \(error)")
+            projects = []
+        }
+    }
+
+    private func persistUpsert(_ project: Project) {
+        if let repository {
+            do {
+                try repository.upsertProject(
+                    id: project.id,
+                    name: project.name,
+                    colorRaw: project.color.rawValue,
+                    goalHours: project.goalHours,
+                    createdDate: project.createdDate,
+                    isArchived: project.isArchived
+                )
+                for tag in project.tags {
+                    try repository.upsertTag(
+                        id: tag.id,
+                        name: tag.name,
+                        createdDate: tag.createdDate,
+                        projectId: project.id,
+                        parentId: tag.parentId
+                    )
+                }
+                loadFromRepository(repository: repository)
+            } catch {
+                print("ProjectStore: persistUpsert repo error — \(error)")
+            }
+        } else {
+            save()
+        }
     }
 }

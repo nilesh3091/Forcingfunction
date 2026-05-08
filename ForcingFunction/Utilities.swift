@@ -142,6 +142,7 @@ struct SoundManager {
 protocol FocusRepository: Sendable {
     func fetchSessions(in interval: DateInterval) throws -> [SDFocusSession]
     func fetchProjects(includeArchived: Bool) throws -> [SDProject]
+    func fetchProjectTags(projectId: UUID) throws -> [SDProjectTag]
 
     func upsertProject(
         id: UUID,
@@ -173,6 +174,8 @@ protocol FocusRepository: Sendable {
         events: [SessionEvent]
     ) throws
 
+    func deleteSession(id: UUID) throws
+    func deleteAllProjects() throws
     func deleteAllSessions() throws
 }
 
@@ -209,6 +212,15 @@ final class SwiftDataFocusRepository: FocusRepository {
                 sortBy: [SortDescriptor(\.createdDate, order: .forward)]
             )
         }
+        return try ctx.fetch(descriptor)
+    }
+
+    func fetchProjectTags(projectId: UUID) throws -> [SDProjectTag] {
+        let ctx = context()
+        let descriptor = FetchDescriptor<SDProjectTag>(
+            predicate: #Predicate { $0.project?.id == projectId },
+            sortBy: [SortDescriptor(\.createdDate, order: .forward)]
+        )
         return try ctx.fetch(descriptor)
     }
 
@@ -350,14 +362,32 @@ final class SwiftDataFocusRepository: FocusRepository {
         for s in sessions { ctx.delete(s) }
         try ctx.save()
     }
+
+    func deleteSession(id: UUID) throws {
+        let ctx = context()
+        if let session = try ctx.fetch(FetchDescriptor<SDFocusSession>(predicate: #Predicate { $0.id == id })).first {
+            ctx.delete(session)
+            try ctx.save()
+        }
+    }
+
+    func deleteAllProjects() throws {
+        let ctx = context()
+        let projects = try ctx.fetch(FetchDescriptor<SDProject>())
+        for p in projects { ctx.delete(p) }
+        try ctx.save()
+    }
 }
 
 private struct UnconfiguredFocusRepository: FocusRepository {
     func fetchSessions(in interval: DateInterval) throws -> [SDFocusSession] { [] }
     func fetchProjects(includeArchived: Bool) throws -> [SDProject] { [] }
+    func fetchProjectTags(projectId: UUID) throws -> [SDProjectTag] { [] }
     func upsertProject(id: UUID, name: String, colorRaw: String, goalHours: Double, createdDate: Date, isArchived: Bool) throws {}
     func upsertTag(id: UUID, name: String, createdDate: Date, projectId: UUID?, parentId: UUID?) throws {}
     func upsertSession(id: UUID, startTime: Date, endTime: Date?, plannedMinutes: Double, statusRaw: String, kindRaw: String, title: String?, projectId: UUID?, tagId: UUID?, events: [SessionEvent]) throws {}
+    func deleteSession(id: UUID) throws {}
+    func deleteAllProjects() throws {}
     func deleteAllSessions() throws {}
 }
 
