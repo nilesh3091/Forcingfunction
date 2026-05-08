@@ -56,11 +56,7 @@ class TimerViewModel: ObservableObject {
     
     // MARK: - Private Properties
     private var timer: Timer?
-    private var startTime: Date?
-    private var pausedSeconds: Int = 0
-    private var originalDurationSeconds: Int = 0  // Store original duration for time-based calculation
-    private var pausedDuration: TimeInterval = 0  // Track total paused time
-    private var pauseStartTime: Date?  // Track when pause started
+    private var engine = TimerEngine()
     private var cancellables = Set<AnyCancellable>()
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
@@ -76,6 +72,12 @@ class TimerViewModel: ObservableObject {
         var pauseStartTime: Date?
         var selectedMinutes: Double
         var sessionTypeRaw: String
+    }
+
+    private func syncPublishedFromEngine() {
+        selectedMinutes = engine.selectedMinutes
+        remainingSeconds = engine.remainingSeconds
+        timerState = engine.timerState
     }
     
     // MARK: - Computed Properties
@@ -190,6 +192,7 @@ class TimerViewModel: ObservableObject {
         // Always start at 25 minutes
         selectedMinutes = 25.0
         remainingSeconds = Int(selectedMinutes * 60)
+        engine.resetToIdle(minutes: selectedMinutes)
         
         // Load statistics from stored data
         loadStatistics()
@@ -268,24 +271,18 @@ class TimerViewModel: ObservableObject {
     
     // MARK: - Timer Control
     func startTimer() {
-        guard timerState != .running else { return }
+        guard engine.timerState != .running else { return }
         
         // Don't start if time is 0
         guard selectedMinutes > 0 else { return }
         
         let now = Date()
-        let resumeFromPaused = (timerState == .paused)
+        let resumeFromPaused = (engine.timerState == .paused)
         
-        if timerState == .paused {
+        if engine.timerState == .paused {
             // Resume from paused state
-            // Add the paused duration to our total paused time
-            if let pauseStart = pauseStartTime {
-                pausedDuration += now.timeIntervalSince(pauseStart)
-                pauseStartTime = nil
-            }
-            
-            // Set remaining seconds from paused state (will be recalculated by tick() based on time)
-            remainingSeconds = pausedSeconds
+            engine.resume(now: now)
+            syncPublishedFromEngine()
             
             // Add resume event to current session
             if var session = currentSession {
@@ -302,17 +299,14 @@ class TimerViewModel: ObservableObject {
                     remainingSeconds: remainingSeconds,
                     timerState: .running,
                     sessionType: currentSessionType,
-                    startTime: startTime ?? now,
-                    pausedDuration: pausedDuration
+                    startTime: engine.startTime ?? now,
+                    pausedDuration: engine.pausedDuration
                 )
             }
         } else {
             // Start new session
-            remainingSeconds = Int(selectedMinutes * 60)
-            pausedSeconds = remainingSeconds
-            originalDurationSeconds = remainingSeconds
-            pausedDuration = 0  // Reset paused duration for new session
-            pauseStartTime = nil
+            engine.startNew(now: now, minutes: selectedMinutes)
+            syncPublishedFromEngine()
             
             // Create new session
             let cleanTitle = setupTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -337,7 +331,7 @@ class TimerViewModel: ObservableObject {
                 liveActivityManager.startActivity(
                     sessionId: newSession.id,
                     sessionType: currentSessionType,
-                    totalDurationSeconds: originalDurationSeconds,
+                    totalDurationSeconds: engine.originalDurationSeconds,
                     remainingSeconds: remainingSeconds,
                     startTime: now,
                     pausedDuration: 0
@@ -345,17 +339,11 @@ class TimerViewModel: ObservableObject {
             }
         }
         
-        timerState = .running
-        updateIdleTimerForSession()
-        // New sessions need a fresh wall-clock anchor. Resuming must keep the original `startTime`
-        // so `tick()`'s elapsed math stays consistent with `pausedDuration` (otherwise remaining jumps to full duration).
-        if resumeFromPaused {
-            if startTime == nil {
-                startTime = now
-            }
-        } else {
-            startTime = now
+        if !resumeFromPaused {
+            // ensure published state reflects a fresh start
+            syncPublishedFromEngine()
         }
+        updateIdleTimerForSession()
         
         // Save timer state to disk
         saveTimerState()
@@ -373,18 +361,17 @@ class TimerViewModel: ObservableObject {
     }
     
     func pauseTimer() {
-        guard timerState == .running else { return }
+        guard engine.timerState == .running else { return }
         
-        timerState = .paused
+        let now = Date()
+        engine.pause(now: now)
+        syncPublishedFromEngine()
         updateIdleTimerForSession()
-        pausedSeconds = remainingSeconds
-        pauseStartTime = Date()  // Track when pause started
         timer?.invalidate()
         timer = nil
         cancelNotification()
         
         // Add pause event to current session
-        let now = Date()
         if var session = currentSession {
             let pauseEvent = SessionEvent(timestamp: now, eventType: .paused)
             session.events.append(pauseEvent)
@@ -402,8 +389,8 @@ class TimerViewModel: ObservableObject {
                 remainingSeconds: remainingSeconds,
                 timerState: .paused,
                 sessionType: currentSessionType,
-                startTime: startTime ?? Date(),
-                pausedDuration: pausedDuration
+                startTime: engine.startTime ?? now,
+                pausedDuration: engine.pausedDuration
             )
         }
         
@@ -426,14 +413,9 @@ class TimerViewModel: ObservableObject {
             currentSession = nil
         }
         
-        timerState = .idle
+        engine.resetToIdle(minutes: selectedMinutes)
+        syncPublishedFromEngine()
         updateIdleTimerForSession()
-        remainingSeconds = Int(selectedMinutes * 60)
-        pausedSeconds = remainingSeconds
-        startTime = nil
-        originalDurationSeconds = 0
-        pausedDuration = 0
-        pauseStartTime = nil
         cancelNotification()
         
         // Stop background updates
@@ -462,7 +444,7 @@ class TimerViewModel: ObservableObject {
         } else {
             // Try to find the session from data store using saved state
             // This handles the case where app was backgrounded and currentSession was lost
-            if let startTime = startTime, originalDurationSeconds > 0 {
+            if let startTime = engine.startTime, engine.originalDurationSeconds > 0 {
                 let matchingSessions = dataStore.getAllSessions().filter { session in
                     abs(session.startTime.timeIntervalSince(startTime)) < 1.0 &&
                     (session.status == .running || session.status == .paused)
@@ -494,7 +476,8 @@ class TimerViewModel: ObservableObject {
         
         // Reset to default idle state when completed
         // This matches the default state when app opens
-        timerState = .idle
+        engine.resetToIdle(minutes: selectedMinutes)
+        syncPublishedFromEngine()
         updateIdleTimerForSession()
         
         // Reset to default time based on session type
@@ -508,8 +491,8 @@ class TimerViewModel: ObservableObject {
             selectedMinutes = longBreakMinutes
         }
         
-        remainingSeconds = Int(selectedMinutes * 60)
-        pausedSeconds = remainingSeconds
+        engine.resetToIdle(minutes: selectedMinutes)
+        syncPublishedFromEngine()
         
         // Play sound if enabled
         if playSoundOnCompletion {
@@ -565,9 +548,8 @@ class TimerViewModel: ObservableObject {
             selectedMinutes = pomodoroMinutes
         }
 
-        remainingSeconds = Int(selectedMinutes * 60)
-        pausedSeconds = remainingSeconds
-        timerState = .idle
+        engine.resetToIdle(minutes: selectedMinutes)
+        syncPublishedFromEngine()
         updateIdleTimerForSession()
 
         if autoStartNext {
@@ -582,11 +564,10 @@ class TimerViewModel: ObservableObject {
         // Round to whole minutes
         let wholeMinutes = round(newMinutes)
         
-        guard timerState == .idle else { return }
+        guard engine.timerState == .idle else { return }
         if force || abs(wholeMinutes - selectedMinutes) > 0.01 {
-            selectedMinutes = wholeMinutes
-            remainingSeconds = Int(wholeMinutes * 60)
-            pausedSeconds = remainingSeconds
+            engine.setSelectedMinutes(wholeMinutes)
+            syncPublishedFromEngine()
             
             // Haptic feedback on minute change (skip when forced — caller or drag handles feedback)
             if hapticsEnabled && !force {
@@ -597,11 +578,10 @@ class TimerViewModel: ObservableObject {
     
     func setTimeFromMinutes(_ minutes: Double) {
         let clamped = max(minMinutes, min(maxMinutes, minutes))
-        if timerState == .idle {
+        if engine.timerState == .idle {
             let oldWhole = Int(selectedMinutes.rounded())
-            selectedMinutes = clamped
-            remainingSeconds = Int(selectedMinutes * 60)
-            pausedSeconds = remainingSeconds
+            engine.setSelectedMinutes(clamped)
+            syncPublishedFromEngine()
             if hapticsEnabled && Int(clamped.rounded()) != oldWhole {
                 HapticManager.playSelection()
             }
@@ -626,32 +606,18 @@ class TimerViewModel: ObservableObject {
     }
     
     private func tick() {
-        guard timerState == .running else { return }
-        guard let startTime = startTime else { return }
-        
-        // Calculate elapsed time based on actual time, accounting for pauses
+        guard engine.timerState == .running else { return }
         let now = Date()
-        var elapsed = now.timeIntervalSince(startTime)
-        
-        // Subtract paused duration
-        elapsed -= pausedDuration
-        
-        // If currently paused, subtract the current pause duration
-        if let pauseStart = pauseStartTime {
-            elapsed -= now.timeIntervalSince(pauseStart)
-        }
-        
-        // Calculate remaining seconds
-        remainingSeconds = max(0, originalDurationSeconds - Int(elapsed))
+        remainingSeconds = engine.tick(now: now)
         
         // Update Live Activity (if enabled)
-        if liveActivitiesEnabled {
+        if liveActivitiesEnabled, let startTime = engine.startTime {
             liveActivityManager.updateActivity(
                 remainingSeconds: remainingSeconds,
                 timerState: .running,
                 sessionType: currentSessionType,
                 startTime: startTime,
-                pausedDuration: pausedDuration
+                pausedDuration: engine.pausedDuration
             )
         }
         
@@ -663,24 +629,16 @@ class TimerViewModel: ObservableObject {
     /// Update Live Activity from background task
     private func updateLiveActivityInBackground() {
         guard liveActivitiesEnabled else { return }
-        guard timerState == .running, let startTime = startTime else { return }
-        
-        let now = Date()
-        var elapsed = now.timeIntervalSince(startTime)
-        elapsed -= pausedDuration
-        
-        if let pauseStart = pauseStartTime {
-            elapsed -= now.timeIntervalSince(pauseStart)
-        }
-        
-        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
+        guard engine.timerState == .running, let startTime = engine.startTime else { return }
+
+        let calculatedRemaining = engine.calculateRemainingSeconds(now: Date())
         
         liveActivityManager.updateActivity(
             remainingSeconds: calculatedRemaining,
             timerState: .running,
             sessionType: currentSessionType,
             startTime: startTime,
-            pausedDuration: pausedDuration
+            pausedDuration: engine.pausedDuration
         )
     }
     
@@ -710,31 +668,18 @@ class TimerViewModel: ObservableObject {
     
     func syncTimerState() {
         // First, try to restore state from disk if we don't have it in memory
-        if timerState == .idle && loadTimerStateSnapshot() != nil {
+        if engine.timerState == .idle && loadTimerStateSnapshot() != nil {
             restoreTimerState()
             return
         }
         
         // Only sync if timer is running or paused
-        guard timerState == .running || timerState == .paused else { return }
-        guard let startTime = startTime else { return }
-        
-        let now = Date()
-        var elapsed = now.timeIntervalSince(startTime)
-        
-        // Subtract paused duration
-        elapsed -= pausedDuration
-        
-        // If currently paused, subtract the current pause duration
-        if let pauseStart = pauseStartTime {
-            elapsed -= now.timeIntervalSince(pauseStart)
-        }
-        
-        // Calculate remaining seconds
-        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
+        guard engine.timerState == .running || engine.timerState == .paused else { return }
+        let calculatedRemaining = engine.calculateRemainingSeconds(now: Date())
         
         // Update remaining seconds
         remainingSeconds = calculatedRemaining
+        engine.setRemainingSeconds(calculatedRemaining)
         
         // If timer should have completed, end the session
         if calculatedRemaining <= 0 {
@@ -748,14 +693,14 @@ class TimerViewModel: ObservableObject {
         ensureCurrentSessionExists()
         
         // Restart timer if it's not running (app was backgrounded) and timer was running
-        if timer == nil && timerState == .running {
+        if timer == nil && engine.timerState == .running {
             startTimerTicking()
             // Reschedule notification with updated remaining time
             scheduleNotification()
             
             // Restart background updates
             backgroundTaskManager.startBackgroundUpdates { [weak self] in
-                guard let self = self, self.timerState == .running else { return }
+                guard let self = self, self.engine.timerState == .running else { return }
                 self.updateLiveActivityInBackground()
             }
         }
@@ -765,19 +710,10 @@ class TimerViewModel: ObservableObject {
     /// Called when notification fires or app becomes active
     private func checkAndCompleteTimerIfNeeded() {
         // Only check if timer is running or paused
-        guard timerState == .running || timerState == .paused else { return }
-        guard let startTime = startTime else { return }
-        guard originalDurationSeconds > 0 else { return }
-        
-        let now = Date()
-        var elapsed = now.timeIntervalSince(startTime)
-        elapsed -= pausedDuration
-        
-        if let pauseStart = pauseStartTime {
-            elapsed -= now.timeIntervalSince(pauseStart)
-        }
-        
-        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
+        guard engine.timerState == .running || engine.timerState == .paused else { return }
+        guard engine.originalDurationSeconds > 0 else { return }
+
+        let calculatedRemaining = engine.calculateRemainingSeconds(now: Date())
         
         // If timer should have completed, end the session
         if calculatedRemaining <= 0 {
@@ -794,7 +730,7 @@ class TimerViewModel: ObservableObject {
         }
         
         // Try to find the session from data store using saved state
-        guard let startTime = startTime, originalDurationSeconds > 0 else { return }
+        guard let startTime = engine.startTime, engine.originalDurationSeconds > 0 else { return }
         
         let matchingSessions = dataStore.getAllSessions().filter { session in
             abs(session.startTime.timeIntervalSince(startTime)) < 1.0 &&
@@ -813,7 +749,7 @@ class TimerViewModel: ObservableObject {
                     sessionType: sessionType,
                     startTime: startTime,
                     plannedDurationMinutes: snapshot.selectedMinutes,
-                    status: timerState == .running ? .running : .paused,
+                    status: engine.timerState == .running ? .running : .paused,
                     events: [SessionEvent(timestamp: startTime, eventType: .started)],
                     title: nil,
                     tag: nil,
@@ -868,7 +804,7 @@ class TimerViewModel: ObservableObject {
             return
         }
         
-        if timerState == .idle {
+        if engine.timerState == .idle {
             let newMinutes: Double
             switch currentSessionType {
             case .work:
@@ -881,9 +817,8 @@ class TimerViewModel: ObservableObject {
             // Only update if the new value is different and valid
             let clampedMinutes = max(minMinutes, min(maxMinutes, newMinutes))
             if clampedMinutes != selectedMinutes {
-                selectedMinutes = clampedMinutes
-                remainingSeconds = Int(selectedMinutes * 60)
-                pausedSeconds = remainingSeconds
+                engine.setSelectedMinutes(clampedMinutes)
+                syncPublishedFromEngine()
             }
         }
     }
@@ -892,19 +827,19 @@ class TimerViewModel: ObservableObject {
     
     /// Save current timer state to disk
     private func saveTimerState() {
-        guard timerState == .running || timerState == .paused else {
+        guard engine.timerState == .running || engine.timerState == .paused else {
             clearTimerState()
             return
         }
-        guard let startTime else { return }
+        guard let startTime = engine.startTime else { return }
 
         let snapshot = TimerStateSnapshot(
-            timerStateRaw: (timerState == .running ? "running" : "paused"),
+            timerStateRaw: (engine.timerState == .running ? "running" : "paused"),
             startTime: startTime,
-            originalDurationSeconds: originalDurationSeconds,
-            pausedDuration: pausedDuration,
-            pauseStartTime: pauseStartTime,
-            selectedMinutes: selectedMinutes,
+            originalDurationSeconds: engine.originalDurationSeconds,
+            pausedDuration: engine.pausedDuration,
+            pauseStartTime: engine.pauseStartTime,
+            selectedMinutes: engine.selectedMinutes,
             sessionTypeRaw: currentSessionType.rawValue
         )
 
@@ -926,12 +861,15 @@ class TimerViewModel: ObservableObject {
     private func restoreTimerState() {
         guard let snapshot = loadTimerStateSnapshot() else { return }
         guard snapshot.originalDurationSeconds > 0 else { return }
-
-        selectedMinutes = snapshot.selectedMinutes
-        originalDurationSeconds = snapshot.originalDurationSeconds
-        pausedDuration = snapshot.pausedDuration
-        startTime = snapshot.startTime
-        pauseStartTime = snapshot.pauseStartTime
+        engine.restoreFromSnapshot(
+            timerState: snapshot.timerStateRaw == "running" ? .running : .paused,
+            startTime: snapshot.startTime,
+            originalDurationSeconds: snapshot.originalDurationSeconds,
+            pausedDuration: snapshot.pausedDuration,
+            pauseStartTime: snapshot.pauseStartTime,
+            selectedMinutes: snapshot.selectedMinutes,
+            remainingSeconds: 0
+        )
 
         if let sessionType = SessionType(rawValue: snapshot.sessionTypeRaw) {
             currentSessionType = sessionType
@@ -939,21 +877,13 @@ class TimerViewModel: ObservableObject {
         
         // Calculate remaining time
         let now = Date()
-        guard let start = startTime else { return }
-        var elapsed = now.timeIntervalSince(start)
-        elapsed -= pausedDuration
-        
-        if let pauseStart = pauseStartTime {
-            elapsed -= now.timeIntervalSince(pauseStart)
-        }
-        
-        let calculatedRemaining = max(0, originalDurationSeconds - Int(elapsed))
-        remainingSeconds = calculatedRemaining
-        pausedSeconds = calculatedRemaining
+        let calculatedRemaining = engine.calculateRemainingSeconds(now: now)
+        engine.setRemainingSeconds(calculatedRemaining)
+        syncPublishedFromEngine()
         
         // Restore timer state
         if snapshot.timerStateRaw == "running" {
-            timerState = .running
+            // engine.timerState already reflects running
             updateIdleTimerForSession()
             
             // If timer should have completed, end the session
@@ -969,7 +899,7 @@ class TimerViewModel: ObservableObject {
             
             // Restart background updates
             backgroundTaskManager.startBackgroundUpdates { [weak self] in
-                guard let self = self, self.timerState == .running else { return }
+                guard let self = self, self.engine.timerState == .running else { return }
                 self.updateLiveActivityInBackground()
             }
             
@@ -984,16 +914,16 @@ class TimerViewModel: ObservableObject {
                     liveActivityManager.reconnectOrStartActivity(
                         sessionId: session.id,
                         sessionType: currentSessionType,
-                        totalDurationSeconds: originalDurationSeconds,
+                        totalDurationSeconds: engine.originalDurationSeconds,
                         remainingSeconds: remainingSeconds,
-                        startTime: startTime!,
-                        pausedDuration: pausedDuration,
+                        startTime: engine.startTime!,
+                        pausedDuration: engine.pausedDuration,
                         timerState: .running
                     )
                 }
             }
         } else if snapshot.timerStateRaw == "paused" {
-            timerState = .paused
+            // engine.timerState already reflects paused
             updateIdleTimerForSession()
             
             // Ensure currentSession exists
@@ -1005,10 +935,10 @@ class TimerViewModel: ObservableObject {
                     liveActivityManager.reconnectOrStartActivity(
                         sessionId: session.id,
                         sessionType: currentSessionType,
-                        totalDurationSeconds: originalDurationSeconds,
+                        totalDurationSeconds: engine.originalDurationSeconds,
                         remainingSeconds: remainingSeconds,
-                        startTime: startTime!,
-                        pausedDuration: pausedDuration,
+                        startTime: engine.startTime!,
+                        pausedDuration: engine.pausedDuration,
                         timerState: .paused
                     )
                 } else if liveActivityManager.hasActiveActivity {
@@ -1017,8 +947,8 @@ class TimerViewModel: ObservableObject {
                         remainingSeconds: remainingSeconds,
                         timerState: .paused,
                         sessionType: currentSessionType,
-                        startTime: startTime!,
-                        pausedDuration: pausedDuration
+                        startTime: engine.startTime!,
+                        pausedDuration: engine.pausedDuration
                     )
                 }
             }

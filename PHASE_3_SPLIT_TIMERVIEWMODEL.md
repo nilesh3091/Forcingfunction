@@ -16,16 +16,16 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 3 — Split TimerViewModel
   PHASE STARTED     : 2026-05-08
-  LAST COMPLETED    : 3.0 — Setup & baseline
+  LAST COMPLETED    : 3.1 — Extract `TimerEngine` + unit tests
   CURRENTLY ON      : (none)
-  NEXT TO DO        : 3.1 — Extract `TimerEngine` + unit tests
+  NEXT TO DO        : 3.2 — Introduce `TimerStatePersistence` (single Codable blob)
   PHASE COMPLETE    : ⛔️ no
 ═══════════════════════════════════════════════════════════
 
 STEP CHECKLIST:
 
   [x] 3.0  Setup & baseline (branch + baseline tag)
-  [ ] 3.1  Extract `TimerEngine` + unit tests
+  [x] 3.1  Extract `TimerEngine` + unit tests
   [ ] 3.2  Introduce `TimerStatePersistence` (single Codable blob)
   [ ] 3.3  Introduce `SessionRecorder` actor (repo writes)
   [ ] 3.4  Formalize `PomodoroCoordinator` + wire existing modes

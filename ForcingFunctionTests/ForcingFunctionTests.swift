@@ -97,6 +97,47 @@ struct PomodoroSessionActiveDurationTests {
     }
 }
 
+// MARK: - TimerEngine
+
+@Suite("TimerEngine wall-clock correctness")
+struct TimerEngineTests {
+    @Test func ticksDownFromWallClock() {
+        var engine = TimerEngine()
+        engine.setSelectedMinutes(25)
+
+        let t0 = Date(timeIntervalSince1970: 0)
+        engine.startNew(now: t0, minutes: 25)
+
+        let t60 = Date(timeIntervalSince1970: 60)
+        #expect(engine.tick(now: t60) == 25 * 60 - 60)
+    }
+
+    @Test func pauseStopsCountdownUntilResume() {
+        var engine = TimerEngine()
+        engine.setSelectedMinutes(25)
+
+        let t0 = Date(timeIntervalSince1970: 0)
+        engine.startNew(now: t0, minutes: 25)
+
+        let t600 = Date(timeIntervalSince1970: 10 * 60)
+        _ = engine.tick(now: t600)
+        #expect(engine.remainingSeconds == 15 * 60)
+
+        let pauseAt = Date(timeIntervalSince1970: 12 * 60)
+        engine.pause(now: pauseAt)
+
+        // While paused, wall clock advances but remaining stays constant.
+        let laterWhilePaused = Date(timeIntervalSince1970: 20 * 60)
+        #expect(engine.calculateRemainingSeconds(now: laterWhilePaused) == 15 * 60)
+
+        let resumeAt = Date(timeIntervalSince1970: 20 * 60)
+        engine.resume(now: resumeAt)
+
+        let afterResume = Date(timeIntervalSince1970: 25 * 60)
+        #expect(engine.tick(now: afterResume) == 10 * 60)
+    }
+}
+
 // MARK: - WidgetDataManager week boundary
 
 @Suite("Week boundary calculation")
