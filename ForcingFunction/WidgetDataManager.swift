@@ -80,9 +80,7 @@ class WidgetDataManager {
         
         // Calculate total for the week. Fall back to actualDurationMinutes if active isn't available
         // (keeps widget totals aligned with in-app stats, which use the same fallback chain).
-        let totalMinutes = completedWorkSessions.compactMap { session -> Double? in
-            return session.activeDurationMinutes ?? session.actualDurationMinutes
-        }.reduce(0, +)
+        let totalMinutes = completedWorkSessions.map(\.billedMinutes).reduce(0, +)
         let currentWeekTotalMinutes = Int(totalMinutes)
         
         // Calculate daily totals (Mon-Sun)
@@ -102,7 +100,7 @@ class WidgetDataManager {
         #endif
         
         for session in completedWorkSessions {
-            guard let activeMinutes = session.activeDurationMinutes ?? session.actualDurationMinutes else { continue }
+            let activeMinutes = session.billedMinutes
             let sessionDate = session.startTime
             
             // Validate session is within the week range (safety check)

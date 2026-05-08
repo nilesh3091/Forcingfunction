@@ -212,6 +212,14 @@ struct PomodoroSession: Codable, Identifiable {
         let totalTime = endTime.timeIntervalSince(startTime)
         return (totalTime - totalPausedTime) / 60.0
     }
+
+    /// Single source of truth for “how long was this session, really?” (minutes).
+    var billedMinutes: Double {
+        if let active = activeDurationMinutes { return max(0, active) }
+        if let actual = actualDurationMinutes { return max(0, actual) }
+        if let endTime { return max(0, endTime.timeIntervalSince(startTime) / 60.0) }
+        return max(0, plannedDurationMinutes)
+    }
     
     init(
         id: UUID = UUID(),

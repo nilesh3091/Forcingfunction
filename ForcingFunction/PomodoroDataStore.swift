@@ -56,7 +56,7 @@ class PomodoroDataStore {
                 guard session.sessionType == .work, session.status == .cancelled else { return false }
                 // Keep short cancelled sessions if the user intentionally set a short timer
                 guard session.plannedDurationMinutes > PomodoroSession.minimumRecordedWorkMinutes else { return false }
-                let minutes = session.activeDurationMinutes ?? session.actualDurationMinutes ?? 0
+                let minutes = session.billedMinutes
                 return minutes < PomodoroSession.minimumRecordedWorkMinutes
             }
             if sessions.count != beforeCount {
@@ -166,7 +166,7 @@ class PomodoroDataStore {
     /// Get total focus minutes from all completed work sessions
     func getTotalFocusMinutes() -> Int {
         let completedWorkSessions = getCompletedWorkSessions()
-        let totalMinutes = completedWorkSessions.compactMap { $0.activeDurationMinutes ?? $0.actualDurationMinutes }.reduce(0, +)
+        let totalMinutes = completedWorkSessions.map(\.billedMinutes).reduce(0, +)
         return Int(totalMinutes)
     }
     
@@ -186,15 +186,7 @@ class PomodoroDataStore {
         
         var totalMinutes: Double = 0
         for session in todaySessions {
-            if let activeDuration = session.activeDurationMinutes {
-                totalMinutes += activeDuration
-            } else if let actualDuration = session.actualDurationMinutes {
-                totalMinutes += actualDuration
-            } else if let endTime = session.endTime {
-                totalMinutes += endTime.timeIntervalSince(session.startTime) / 60.0
-            } else {
-                totalMinutes += session.plannedDurationMinutes
-            }
+            totalMinutes += session.billedMinutes
         }
         return Int(totalMinutes)
     }
