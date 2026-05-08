@@ -55,6 +55,7 @@ class TimerViewModel: ObservableObject {
     private var timer: Timer?
     private var engine = TimerEngine()
     private let statePersistence = TimerStatePersistence()
+    private let sessionRecorder = SessionRecorder(dataStore: .shared)
     private var cancellables = Set<AnyCancellable>()
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
@@ -273,12 +274,10 @@ class TimerViewModel: ObservableObject {
             syncPublishedFromEngine()
             
             // Add resume event to current session
-            if var session = currentSession {
-                let resumeEvent = SessionEvent(timestamp: now, eventType: .resumed)
-                session.events.append(resumeEvent)
-                session.status = .running
-                currentSession = session
-                dataStore.updateSession(session)
+            Task { [weak self] in
+                guard let self else { return }
+                let updated = await self.sessionRecorder.resume(now: now)
+                await MainActor.run { self.currentSession = updated ?? self.currentSession }
             }
             
             // Resume: Update Live Activity to running state (if enabled)
@@ -312,7 +311,10 @@ class TimerViewModel: ObservableObject {
                 projectTagId: UUID(uuidString: setupTagId)
             )
             currentSession = newSession
-            dataStore.addSession(newSession)
+            Task { [weak self] in
+                guard let self else { return }
+                await self.sessionRecorder.recordStart(newSession)
+            }
             
             // Start Live Activity for new session (if enabled)
             if liveActivitiesEnabled {
@@ -360,12 +362,10 @@ class TimerViewModel: ObservableObject {
         cancelNotification()
         
         // Add pause event to current session
-        if var session = currentSession {
-            let pauseEvent = SessionEvent(timestamp: now, eventType: .paused)
-            session.events.append(pauseEvent)
-            session.status = .paused
-            currentSession = session
-            dataStore.updateSession(session)
+        Task { [weak self] in
+            guard let self else { return }
+            let updated = await self.sessionRecorder.pause(now: now)
+            await MainActor.run { self.currentSession = updated ?? self.currentSession }
         }
         
         // Stop background updates when paused
@@ -392,13 +392,10 @@ class TimerViewModel: ObservableObject {
         
         // Cancel current session if it exists
         let now = Date()
-        if var session = currentSession {
-            let cancelEvent = SessionEvent(timestamp: now, eventType: .cancelled)
-            session.events.append(cancelEvent)
-            session.endTime = now
-            session.status = .cancelled
-            dataStore.finalizeEndedSession(session)
-            currentSession = nil
+        Task { [weak self] in
+            guard let self else { return }
+            _ = await self.sessionRecorder.cancel(now: now)
+            await MainActor.run { self.currentSession = nil }
         }
         
         engine.resetToIdle(minutes: selectedMinutes)
@@ -442,23 +439,19 @@ class TimerViewModel: ObservableObject {
         }
         
         // Complete the session if we found one
-        if var session = sessionToComplete {
-            let completeEvent = SessionEvent(timestamp: now, eventType: .completed)
-            session.events.append(completeEvent)
-            session.endTime = now
-            session.status = .completed
-            dataStore.finalizeEndedSession(session)
-            
-            // Update statistics if it was a work session
-            if session.sessionType == .work {
-                loadStatistics() // Reload from data store to get accurate totals
-                // Update widget data
-                WidgetDataManager.shared.updateWidgetData()
+        if sessionToComplete != nil {
+            Task { [weak self] in
+                guard let self else { return }
+                let completed = await self.sessionRecorder.complete(now: now)
+                await MainActor.run {
+                    if completed?.sessionType == .work {
+                        self.loadStatistics()
+                        WidgetDataManager.shared.updateWidgetData()
+                    }
+                    self.currentSession = nil
+                }
             }
-            
-            currentSession = nil
         } else {
-            // If we still can't find a session, log a warning
             print("Warning: endSession() called but no session found to complete")
         }
         
@@ -719,33 +712,17 @@ class TimerViewModel: ObservableObject {
         
         // Try to find the session from data store using saved state
         guard let startTime = engine.startTime, engine.originalDurationSeconds > 0 else { return }
-        
-        let matchingSessions = dataStore.getAllSessions().filter { session in
-            abs(session.startTime.timeIntervalSince(startTime)) < 1.0 &&
-            (session.status == .running || session.status == .paused)
-        }
-        
-        if let session = matchingSessions.first {
-            currentSession = session
-            print("Restored currentSession from data store: \(session.id)")
-        } else {
-            // If we still can't find it, create a new one based on saved state
-            // This handles edge cases where the session was never saved
-            guard let snapshot = statePersistence.load(),
-                  let sessionType = SessionType(rawValue: snapshot.sessionTypeRaw) else { return }
-                let newSession = PomodoroSession(
-                    sessionType: sessionType,
-                    startTime: startTime,
-                    plannedDurationMinutes: snapshot.selectedMinutes,
-                    status: engine.timerState == .running ? .running : .paused,
-                    events: [SessionEvent(timestamp: startTime, eventType: .started)],
-                    title: nil,
-                    tag: nil,
-                    tagColor: nil
-                )
-                currentSession = newSession
-                dataStore.addSession(newSession)
-                print("Created new session from saved state: \(newSession.id)")
+
+            Task { [weak self] in
+            guard let self else { return }
+            let restored = await self.sessionRecorder.restoreIfNeeded(startTime: startTime)
+            await MainActor.run {
+                if let restored {
+                    self.currentSession = restored
+                } else {
+                    print("Warning: ensureCurrentSessionExists() couldn't restore session")
+                }
+            }
         }
     }
     

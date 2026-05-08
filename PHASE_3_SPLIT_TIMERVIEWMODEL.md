@@ -16,9 +16,9 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 3 — Split TimerViewModel
   PHASE STARTED     : 2026-05-08
-  LAST COMPLETED    : 3.2 — Introduce `TimerStatePersistence` (single Codable blob)
+  LAST COMPLETED    : 3.3 — Introduce `SessionRecorder` actor (repo writes)
   CURRENTLY ON      : (none)
-  NEXT TO DO        : 3.3 — Introduce `SessionRecorder` actor (repo writes)
+  NEXT TO DO        : 3.4 — Formalize `PomodoroCoordinator` + wire existing modes
   PHASE COMPLETE    : ⛔️ no
 ═══════════════════════════════════════════════════════════
 
@@ -27,7 +27,7 @@ STEP CHECKLIST:
   [x] 3.0  Setup & baseline (branch + baseline tag)
   [x] 3.1  Extract `TimerEngine` + unit tests
   [x] 3.2  Introduce `TimerStatePersistence` (single Codable blob)
-  [ ] 3.3  Introduce `SessionRecorder` actor (repo writes)
+  [x] 3.3  Introduce `SessionRecorder` actor (repo writes)
   [ ] 3.4  Formalize `PomodoroCoordinator` + wire existing modes
   [ ] 3.5  Introduce `FocusSessionStore` facade + rewire views
   [ ] 3.6  Protocol-front coordinators (notifications/live activity/bg/widget)

@@ -11,7 +11,7 @@ import UIKit
 import SwiftData
 
 /// Represents the type of session in the Pomodoro cycle
-enum SessionType: String, CaseIterable, Codable {
+enum SessionType: String, CaseIterable, Codable, Sendable {
     case work = "Work"
     case shortBreak = "Short Break"
     case longBreak = "Long Break"
@@ -81,7 +81,7 @@ struct AppTheme {
 }
 
 /// Timer state
-enum TimerState {
+enum TimerState: Sendable {
     case idle
     case running
     case paused
@@ -106,13 +106,13 @@ struct AppSettings {
 // MARK: - Pomodoro Session Data Models
 
 /// Represents an event that occurred during a pomodoro session
-struct SessionEvent: Codable {
+struct SessionEvent: Codable, Sendable {
     let timestamp: Date
     let eventType: EventType
 }
 
 /// Types of events that can occur during a session
-enum EventType: String, Codable {
+enum EventType: String, Codable, Sendable {
     case started
     case paused
     case resumed
@@ -121,7 +121,7 @@ enum EventType: String, Codable {
 }
 
 /// Status of a pomodoro session
-enum SessionStatus: String, Codable {
+enum SessionStatus: String, Codable, Sendable {
     case running
     case paused
     case completed
@@ -131,7 +131,7 @@ enum SessionStatus: String, Codable {
 // MARK: - Category Models
 
 /// Color options for categories
-enum CategoryColor: String, CaseIterable, Codable {
+enum CategoryColor: String, CaseIterable, Codable, Sendable {
     case red = "Red"
     case blue = "Blue"
     case green = "Green"
@@ -160,7 +160,7 @@ enum CategoryColor: String, CaseIterable, Codable {
 }
 
 /// Represents a complete pomodoro session with all its data
-struct PomodoroSession: Codable, Identifiable {
+struct PomodoroSession: Codable, Identifiable, Sendable {
     let id: UUID
     let sessionType: SessionType
     let startTime: Date
