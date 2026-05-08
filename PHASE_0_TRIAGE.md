@@ -31,7 +31,7 @@ STEP CHECKLIST:
   [x] 0.5  Trim AppTheme to actually-used props (Models.swift)
   [x] 0.6  Delete "Reset Statistics" button     (SettingsView.swift)
   [x] 0.7  Delete dead setupTag pill            (TimerView.swift header)
-  [x] 0.8  Add real unit tests                  (ForcingFunctionTests.swift; sim test-run deferred)
+  [x] 0.8  Add real unit tests                  (ForcingFunctionTests.swift)
   [x] 0.9  Final verification + tag phase done  (xcodebuild + git tag phase-0-done)
 
 LEGEND:  [ ] not started   [~] in progress   [x] done   [-] skipped (with reason)
