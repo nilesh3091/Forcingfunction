@@ -15,6 +15,7 @@ class LiveActivityManager {
     private var currentActivity: Activity<ForcingFunctionWidgetAttributes>?
     private var pushToken: Data?
     private var updateTimer: Timer?
+    private var pushTokenTask: Task<Void, Never>?
     
     private init() {}
     
@@ -71,9 +72,12 @@ class LiveActivityManager {
             
             currentActivity = activity
             
-            // Get push token for sending updates
-            Task {
+            // Get push token for sending updates (cancelled on endActivity)
+            pushTokenTask?.cancel()
+            pushTokenTask = Task { [weak self] in
+                guard let self else { return }
                 for await tokenData in activity.pushTokenUpdates {
+                    if Task.isCancelled { break }
                     self.pushToken = tokenData
                     print("LiveActivityManager: Received push token: \(tokenData.map { String(format: "%02x", $0) }.joined())")
                     // Start periodic push updates
@@ -205,6 +209,8 @@ class LiveActivityManager {
     func endActivity() {
         updateTimer?.invalidate()
         updateTimer = nil
+        pushTokenTask?.cancel()
+        pushTokenTask = nil
         
         // Try to get current activity, or find an existing one
         guard let activity = getCurrentActivity() else {
@@ -247,6 +253,8 @@ class LiveActivityManager {
         
         currentActivity = nil
         pushToken = nil
+        pushTokenTask?.cancel()
+        pushTokenTask = nil
         print("LiveActivityManager: Ended all Live Activities")
     }
     

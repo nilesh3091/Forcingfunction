@@ -7,34 +7,7 @@
 
 typealias TimerViewModel = FocusSessionStore
 /*
-
-//
-//  TimerViewModel.swift
-//  ForcingFunction
-//
-//  Compatibility shim: Phase 3 introduces `FocusSessionStore`.
-//
-
-typealias TimerViewModel = FocusSessionStore
-
-//
-//  TimerViewModel.swift
-//  ForcingFunction
-//
-//  Compatibility shim: Phase 3 introduces `FocusSessionStore`.
-//
-
-typealias TimerViewModel = FocusSessionStore
-    
-    var appAppearance: AppAppearance {
-        get { AppAppearance(rawValue: appAppearanceRaw) ?? .system }
-        set { appAppearanceRaw = newValue.rawValue }
-    }
-    
-    /// Global accent (work / cyan) — tabs, settings, calendar, stats.
-    var accentColor: Color {
-        theme.accentColor
-    }
+Legacy implementation removed in Phase 3.
     
     /// Work vs break accent for timer dial, readout, and primary session controls.
     var sessionAccentColor: Color {
@@ -825,5 +798,4 @@ typealias TimerViewModel = FocusSessionStore
             }
         }
     }
-}
 */
