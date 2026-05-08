@@ -51,28 +51,16 @@ class TimerViewModel: ObservableObject {
     @AppStorage("hasMigratedToSingleDailyGoal") private var hasMigratedToSingleDailyGoal: Bool = false
     @AppStorage("appAppearance") private var appAppearanceRaw: String = AppAppearance.system.rawValue
     
-    // MARK: - Timer State Persistence (single Codable blob — Phase 2)
-    @AppStorage("timerStateSnapshot") private var timerStateSnapshotData: Data = Data()
-    
     // MARK: - Private Properties
     private var timer: Timer?
     private var engine = TimerEngine()
+    private let statePersistence = TimerStatePersistence()
     private var cancellables = Set<AnyCancellable>()
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
     private let dataStore = PomodoroDataStore.shared
     private let liveActivityManager = LiveActivityManager.shared
     private let backgroundTaskManager = BackgroundTaskManager.shared
-
-    private struct TimerStateSnapshot: Codable {
-        var timerStateRaw: String            // "running" | "paused"
-        var startTime: Date
-        var originalDurationSeconds: Int
-        var pausedDuration: TimeInterval
-        var pauseStartTime: Date?
-        var selectedMinutes: Double
-        var sessionTypeRaw: String
-    }
 
     private func syncPublishedFromEngine() {
         selectedMinutes = engine.selectedMinutes
@@ -211,12 +199,12 @@ class TimerViewModel: ObservableObject {
         
         // Restore timer state from disk if available
         // This MUST happen before cleanupOrphanedSessions to complete expired sessions
-        restoreTimerState()
+        recoverTimerStateIfNeeded()
         
         // Complete any expired sessions that finished while app was terminated
         // This handles the case where app was killed and notification fired
-        // Pass saved startTime to avoid completing the session that restoreTimerState() is handling
-        let savedStartTime = loadTimerStateSnapshot()?.startTime
+        // Pass saved startTime to avoid completing the session that recoverTimerStateIfNeeded() is handling
+        let savedStartTime = statePersistence.load()?.startTime
         dataStore.completeExpiredSessions(excludingStartTime: savedStartTime)
         
         // Reload statistics after completing expired sessions
@@ -224,7 +212,7 @@ class TimerViewModel: ObservableObject {
         
         // Clean up orphaned sessions from crashes/force quits
         // This removes any running/paused sessions that were left behind
-        // IMPORTANT: This runs AFTER restoreTimerState() and completeExpiredSessions() 
+        // IMPORTANT: This runs AFTER recoverTimerStateIfNeeded() and completeExpiredSessions()
         // so expired sessions can be completed first
         dataStore.cleanupOrphanedSessions()
         
@@ -427,7 +415,7 @@ class TimerViewModel: ObservableObject {
         }
         
         // Clear saved timer state
-        clearTimerState()
+        statePersistence.clear()
     }
     
     func endSession() {
@@ -516,7 +504,7 @@ class TimerViewModel: ObservableObject {
         }
         
         // Clear saved timer state (but keep completion flag)
-        clearTimerState()
+        statePersistence.clear()
         
         // Auto-start next session if enabled
         if autoStartNext {
@@ -668,8 +656,8 @@ class TimerViewModel: ObservableObject {
     
     func syncTimerState() {
         // First, try to restore state from disk if we don't have it in memory
-        if engine.timerState == .idle && loadTimerStateSnapshot() != nil {
-            restoreTimerState()
+        if engine.timerState == .idle && statePersistence.load() != nil {
+            recoverTimerStateIfNeeded()
             return
         }
         
@@ -743,7 +731,7 @@ class TimerViewModel: ObservableObject {
         } else {
             // If we still can't find it, create a new one based on saved state
             // This handles edge cases where the session was never saved
-            guard let snapshot = loadTimerStateSnapshot(),
+            guard let snapshot = statePersistence.load(),
                   let sessionType = SessionType(rawValue: snapshot.sessionTypeRaw) else { return }
                 let newSession = PomodoroSession(
                     sessionType: sessionType,
@@ -825,15 +813,14 @@ class TimerViewModel: ObservableObject {
     
     // MARK: - Timer State Persistence
     
-    /// Save current timer state to disk
     private func saveTimerState() {
         guard engine.timerState == .running || engine.timerState == .paused else {
-            clearTimerState()
+            statePersistence.clear()
             return
         }
         guard let startTime = engine.startTime else { return }
 
-        let snapshot = TimerStateSnapshot(
+        let snapshot = TimerStatePersistence.Snapshot(
             timerStateRaw: (engine.timerState == .running ? "running" : "paused"),
             startTime: startTime,
             originalDurationSeconds: engine.originalDurationSeconds,
@@ -842,131 +829,63 @@ class TimerViewModel: ObservableObject {
             selectedMinutes: engine.selectedMinutes,
             sessionTypeRaw: currentSessionType.rawValue
         )
-
-        do {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            timerStateSnapshotData = try encoder.encode(snapshot)
-        } catch {
-            print("TimerViewModel: failed to encode timer snapshot — \(error)")
-        }
+        statePersistence.save(snapshot)
     }
     
-    /// Clear saved timer state from disk
-    private func clearTimerState() {
-        timerStateSnapshotData = Data()
-    }
-    
-    /// Restore timer state from disk
-    private func restoreTimerState() {
-        guard let snapshot = loadTimerStateSnapshot() else { return }
-        guard snapshot.originalDurationSeconds > 0 else { return }
-        engine.restoreFromSnapshot(
-            timerState: snapshot.timerStateRaw == "running" ? .running : .paused,
-            startTime: snapshot.startTime,
-            originalDurationSeconds: snapshot.originalDurationSeconds,
-            pausedDuration: snapshot.pausedDuration,
-            pauseStartTime: snapshot.pauseStartTime,
-            selectedMinutes: snapshot.selectedMinutes,
-            remainingSeconds: 0
-        )
-
-        if let sessionType = SessionType(rawValue: snapshot.sessionTypeRaw) {
-            currentSessionType = sessionType
-        }
-        
-        // Calculate remaining time
+    private func recoverTimerStateIfNeeded() {
         let now = Date()
-        let calculatedRemaining = engine.calculateRemainingSeconds(now: now)
-        engine.setRemainingSeconds(calculatedRemaining)
+        let outcome = statePersistence.recoverIfNeeded(now: now, engine: &engine, currentSessionType: &currentSessionType)
         syncPublishedFromEngine()
-        
-        // Restore timer state
-        if snapshot.timerStateRaw == "running" {
-            // engine.timerState already reflects running
+
+        switch outcome {
+        case .noSnapshot:
+            return
+        case .completedExpired:
+            ensureCurrentSessionExists()
+            endSession()
+            return
+        case .restoredRunning:
             updateIdleTimerForSession()
-            
-            // If timer should have completed, end the session
-            if calculatedRemaining <= 0 {
-                ensureCurrentSessionExists()
-                endSession()
-                return
-            }
-            
-            // Restart the timer
             startTimerTicking()
             scheduleNotification()
-            
-            // Restart background updates
             backgroundTaskManager.startBackgroundUpdates { [weak self] in
-                guard let self = self, self.engine.timerState == .running else { return }
+                guard let self, self.engine.timerState == .running else { return }
                 self.updateLiveActivityInBackground()
             }
-            
-            // Ensure currentSession exists before continuing
             ensureCurrentSessionExists()
-            
-            // Restart Live Activity if needed (if enabled)
-            if liveActivitiesEnabled {
-                
-                // Use reconnectOrStartActivity which will find existing or create new
-                if let session = currentSession {
-                    liveActivityManager.reconnectOrStartActivity(
-                        sessionId: session.id,
-                        sessionType: currentSessionType,
-                        totalDurationSeconds: engine.originalDurationSeconds,
-                        remainingSeconds: remainingSeconds,
-                        startTime: engine.startTime!,
-                        pausedDuration: engine.pausedDuration,
-                        timerState: .running
-                    )
-                }
+            if liveActivitiesEnabled, let session = currentSession, let startTime = engine.startTime {
+                liveActivityManager.reconnectOrStartActivity(
+                    sessionId: session.id,
+                    sessionType: currentSessionType,
+                    totalDurationSeconds: engine.originalDurationSeconds,
+                    remainingSeconds: remainingSeconds,
+                    startTime: startTime,
+                    pausedDuration: engine.pausedDuration,
+                    timerState: .running
+                )
             }
-        } else if snapshot.timerStateRaw == "paused" {
-            // engine.timerState already reflects paused
+        case .restoredPaused:
             updateIdleTimerForSession()
-            
-            // Ensure currentSession exists
             ensureCurrentSessionExists()
-            
-            // Reconnect or update Live Activity (if enabled)
-            if liveActivitiesEnabled {
-                if let session = currentSession {
-                    liveActivityManager.reconnectOrStartActivity(
-                        sessionId: session.id,
-                        sessionType: currentSessionType,
-                        totalDurationSeconds: engine.originalDurationSeconds,
-                        remainingSeconds: remainingSeconds,
-                        startTime: engine.startTime!,
-                        pausedDuration: engine.pausedDuration,
-                        timerState: .paused
-                    )
-                } else if liveActivityManager.hasActiveActivity {
-                    // Fallback: update existing activity if we don't have session info
-                    liveActivityManager.updateActivity(
-                        remainingSeconds: remainingSeconds,
-                        timerState: .paused,
-                        sessionType: currentSessionType,
-                        startTime: engine.startTime!,
-                        pausedDuration: engine.pausedDuration
-                    )
-                }
+            if liveActivitiesEnabled, let session = currentSession, let startTime = engine.startTime {
+                liveActivityManager.reconnectOrStartActivity(
+                    sessionId: session.id,
+                    sessionType: currentSessionType,
+                    totalDurationSeconds: engine.originalDurationSeconds,
+                    remainingSeconds: remainingSeconds,
+                    startTime: startTime,
+                    pausedDuration: engine.pausedDuration,
+                    timerState: .paused
+                )
+            } else if liveActivitiesEnabled, liveActivityManager.hasActiveActivity, let startTime = engine.startTime {
+                liveActivityManager.updateActivity(
+                    remainingSeconds: remainingSeconds,
+                    timerState: .paused,
+                    sessionType: currentSessionType,
+                    startTime: startTime,
+                    pausedDuration: engine.pausedDuration
+                )
             }
-        }
-
-        // One-shot restore: avoid re-restoring on next cold launch.
-        clearTimerState()
-    }
-
-    private func loadTimerStateSnapshot() -> TimerStateSnapshot? {
-        guard !timerStateSnapshotData.isEmpty else { return nil }
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(TimerStateSnapshot.self, from: timerStateSnapshotData)
-        } catch {
-            print("TimerViewModel: failed to decode timer snapshot — \(error)")
-            return nil
         }
     }
     
