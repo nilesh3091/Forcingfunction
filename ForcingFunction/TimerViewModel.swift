@@ -42,6 +42,7 @@ class TimerViewModel: ObservableObject {
     @AppStorage("pomodorosBeforeLongBreak") var pomodorosBeforeLongBreak: Int = AppSettings.defaultPomodorosBeforeLongBreak
     @AppStorage("snapIncrement") var snapIncrement: Double = AppSettings.defaultSnapIncrement
     @AppStorage("hasMigratedToNewRange") var hasMigratedToNewRange: Bool = false
+    @AppStorage("strictPomodoroMode") var strictPomodoroMode: Bool = false
     @AppStorage("autoStartNext") var autoStartNext: Bool = false
     @AppStorage("playSoundOnCompletion") var playSoundOnCompletion: Bool = true
     @AppStorage("hapticsEnabled") var hapticsEnabled: Bool = true
@@ -552,35 +553,34 @@ class TimerViewModel: ObservableObject {
     }
     
     func startNextSession() {
-        // Determine next session type
         if currentSessionType == .work {
-            // Update completed pomodoros count from data store
-            completedPomodoros = dataStore.getCompletedPomodorosCount()
-            
-            if completedPomodoros >= pomodorosBeforeLongBreak {
-                currentSessionType = .longBreak
-                selectedMinutes = longBreakMinutes
-                completedPomodoros = 0
+            if strictPomodoroMode {
+                completedPomodoros = dataStore.getCompletedPomodorosCount()
+                if completedPomodoros >= pomodorosBeforeLongBreak {
+                    currentSessionType = .longBreak
+                    selectedMinutes = longBreakMinutes
+                    completedPomodoros = 0
+                } else {
+                    currentSessionType = .shortBreak
+                    selectedMinutes = shortBreakMinutes
+                }
             } else {
+                // Free-flow: every post-work break is a short break.
                 currentSessionType = .shortBreak
                 selectedMinutes = shortBreakMinutes
             }
         } else {
-            // Break finished, start work session
             currentSessionType = .work
             selectedMinutes = pomodoroMinutes
         }
-        
+
         remainingSeconds = Int(selectedMinutes * 60)
         pausedSeconds = remainingSeconds
         timerState = .idle
         updateIdleTimerForSession()
-        
-        // Auto-start the next session if enabled
+
         if autoStartNext {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.startTimer()
-            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.startTimer() }
         }
     }
     
