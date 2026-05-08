@@ -56,6 +56,7 @@ class TimerViewModel: ObservableObject {
     private var engine = TimerEngine()
     private let statePersistence = TimerStatePersistence()
     private let sessionRecorder = SessionRecorder(dataStore: .shared)
+    private let pomodoroCoordinator = PomodoroCoordinator()
     private var cancellables = Set<AnyCancellable>()
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
@@ -508,25 +509,23 @@ class TimerViewModel: ObservableObject {
     }
     
     func startNextSession() {
-        if currentSessionType == .work {
-            if strictPomodoroMode {
-                completedPomodoros = dataStore.getCompletedPomodorosCount()
-                if completedPomodoros >= pomodorosBeforeLongBreak {
-                    currentSessionType = .longBreak
-                    selectedMinutes = longBreakMinutes
-                    completedPomodoros = 0
-                } else {
-                    currentSessionType = .shortBreak
-                    selectedMinutes = shortBreakMinutes
-                }
-            } else {
-                // Free-flow: every post-work break is a short break.
-                currentSessionType = .shortBreak
-                selectedMinutes = shortBreakMinutes
-            }
-        } else {
-            currentSessionType = .work
-            selectedMinutes = pomodoroMinutes
+        let settings = PomodoroCoordinator.Settings(
+            strictPomodoroMode: strictPomodoroMode,
+            pomodoroMinutes: pomodoroMinutes,
+            shortBreakMinutes: shortBreakMinutes,
+            longBreakMinutes: longBreakMinutes,
+            pomodorosBeforeLongBreak: pomodorosBeforeLongBreak
+        )
+        let completedCount = dataStore.getCompletedPomodorosCount()
+        let next = pomodoroCoordinator.nextSession(
+            currentSessionType: currentSessionType,
+            completedPomodorosCount: completedCount,
+            settings: settings
+        )
+        currentSessionType = next.sessionType
+        selectedMinutes = next.minutes
+        if let updated = next.completedPomodoros {
+            completedPomodoros = updated
         }
 
         engine.resetToIdle(minutes: selectedMinutes)

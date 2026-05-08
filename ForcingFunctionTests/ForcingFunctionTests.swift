@@ -138,6 +138,52 @@ struct TimerEngineTests {
     }
 }
 
+@Suite("PomodoroCoordinator")
+struct PomodoroCoordinatorTests {
+    @Test func freeFlowWorkAlwaysGoesToShortBreak() {
+        let coord = PomodoroCoordinator()
+        let settings = PomodoroCoordinator.Settings(
+            strictPomodoroMode: false,
+            pomodoroMinutes: 25,
+            shortBreakMinutes: 5,
+            longBreakMinutes: 15,
+            pomodorosBeforeLongBreak: 4
+        )
+        let next = coord.nextSession(currentSessionType: .work, completedPomodorosCount: 999, settings: settings)
+        #expect(next.sessionType == .shortBreak)
+        #expect(next.minutes == 5)
+    }
+
+    @Test func strictModeLongBreakWhenThresholdReached() {
+        let coord = PomodoroCoordinator()
+        let settings = PomodoroCoordinator.Settings(
+            strictPomodoroMode: true,
+            pomodoroMinutes: 25,
+            shortBreakMinutes: 5,
+            longBreakMinutes: 15,
+            pomodorosBeforeLongBreak: 4
+        )
+        let next = coord.nextSession(currentSessionType: .work, completedPomodorosCount: 4, settings: settings)
+        #expect(next.sessionType == .longBreak)
+        #expect(next.minutes == 15)
+        #expect(next.completedPomodoros == 0)
+    }
+
+    @Test func breakAlwaysGoesToWork() {
+        let coord = PomodoroCoordinator()
+        let settings = PomodoroCoordinator.Settings(
+            strictPomodoroMode: true,
+            pomodoroMinutes: 30,
+            shortBreakMinutes: 7,
+            longBreakMinutes: 20,
+            pomodorosBeforeLongBreak: 4
+        )
+        let next = coord.nextSession(currentSessionType: .shortBreak, completedPomodorosCount: 0, settings: settings)
+        #expect(next.sessionType == .work)
+        #expect(next.minutes == 30)
+    }
+}
+
 // MARK: - WidgetDataManager week boundary
 
 @Suite("Week boundary calculation")
