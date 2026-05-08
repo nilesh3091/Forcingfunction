@@ -12,14 +12,14 @@
 ```
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 1 — Decouple Pomodoro
-  PHASE STARTED     : (not yet)
-  LAST COMPLETED    : (none)
+  PHASE STARTED     : 2026-05-08
+  LAST COMPLETED    : Step 1.0 — Setup & baseline
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 1.0 — Setup
+  NEXT TO DO        : Step 1.1 — Drop wasAutoStarted from PomodoroSession
   PHASE COMPLETE    : ❌ no
 ═══════════════════════════════════════════════════════════
 
-[ ] 1.0  Setup & baseline
+[x] 1.0  Setup & baseline
 [ ] 1.1  Drop wasAutoStarted from PomodoroSession
 [ ] 1.2  Add strictPomodoroMode flag + gate cycle logic
 [ ] 1.3  Humanize notification body
