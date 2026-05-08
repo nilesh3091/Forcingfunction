@@ -51,15 +51,8 @@ class TimerViewModel: ObservableObject {
     @AppStorage("hasMigratedToSingleDailyGoal") private var hasMigratedToSingleDailyGoal: Bool = false
     @AppStorage("appAppearance") private var appAppearanceRaw: String = AppAppearance.system.rawValue
     
-    // MARK: - Timer State Persistence (using @AppStorage)
-    @AppStorage("savedTimerState") private var savedTimerStateRaw: String = ""
-    @AppStorage("savedStartTime") private var savedStartTimeTimestamp: Double = 0
-    @AppStorage("savedOriginalDurationSeconds") private var savedOriginalDurationSeconds: Int = 0
-    @AppStorage("savedPausedDuration") private var savedPausedDuration: Double = 0
-    @AppStorage("savedPauseStartTime") private var savedPauseStartTimeTimestamp: Double = 0
-    @AppStorage("savedSelectedMinutes") private var savedSelectedMinutes: Double = 25.0
-    @AppStorage("savedSessionType") private var savedSessionTypeRaw: String = "Work"
-    @AppStorage("timerWasCompleted") private var timerWasCompleted: Bool = false
+    // MARK: - Timer State Persistence (single Codable blob — Phase 2)
+    @AppStorage("timerStateSnapshot") private var timerStateSnapshotData: Data = Data()
     
     // MARK: - Private Properties
     private var timer: Timer?
@@ -74,6 +67,16 @@ class TimerViewModel: ObservableObject {
     private let dataStore = PomodoroDataStore.shared
     private let liveActivityManager = LiveActivityManager.shared
     private let backgroundTaskManager = BackgroundTaskManager.shared
+
+    private struct TimerStateSnapshot: Codable {
+        var timerStateRaw: String            // "running" | "paused"
+        var startTime: Date
+        var originalDurationSeconds: Int
+        var pausedDuration: TimeInterval
+        var pauseStartTime: Date?
+        var selectedMinutes: Double
+        var sessionTypeRaw: String
+    }
     
     // MARK: - Computed Properties
     
@@ -207,16 +210,10 @@ class TimerViewModel: ObservableObject {
         // This MUST happen before cleanupOrphanedSessions to complete expired sessions
         restoreTimerState()
         
-        // Note: We no longer restore completion state - we reset to idle instead
-        // Clear completion flag if it was set
-        if timerWasCompleted {
-            timerWasCompleted = false
-        }
-        
         // Complete any expired sessions that finished while app was terminated
         // This handles the case where app was killed and notification fired
         // Pass saved startTime to avoid completing the session that restoreTimerState() is handling
-        let savedStartTime = savedStartTimeTimestamp > 0 ? Date(timeIntervalSince1970: savedStartTimeTimestamp) : nil
+        let savedStartTime = loadTimerStateSnapshot()?.startTime
         dataStore.completeExpiredSessions(excludingStartTime: savedStartTime)
         
         // Reload statistics after completing expired sessions
@@ -272,9 +269,6 @@ class TimerViewModel: ObservableObject {
     // MARK: - Timer Control
     func startTimer() {
         guard timerState != .running else { return }
-        
-        // Clear completion flag when starting new timer
-        timerWasCompleted = false
         
         // Don't start if time is 0
         guard selectedMinutes > 0 else { return }
@@ -517,9 +511,6 @@ class TimerViewModel: ObservableObject {
         remainingSeconds = Int(selectedMinutes * 60)
         pausedSeconds = remainingSeconds
         
-        // Clear completion flag since we're resetting to idle
-        timerWasCompleted = false
-        
         // Play sound if enabled
         if playSoundOnCompletion {
             SoundManager.playCompletionSound()
@@ -719,7 +710,7 @@ class TimerViewModel: ObservableObject {
     
     func syncTimerState() {
         // First, try to restore state from disk if we don't have it in memory
-        if timerState == .idle && !savedTimerStateRaw.isEmpty {
+        if timerState == .idle && loadTimerStateSnapshot() != nil {
             restoreTimerState()
             return
         }
@@ -816,11 +807,12 @@ class TimerViewModel: ObservableObject {
         } else {
             // If we still can't find it, create a new one based on saved state
             // This handles edge cases where the session was never saved
-            if let sessionType = SessionType(rawValue: savedSessionTypeRaw) {
+            guard let snapshot = loadTimerStateSnapshot(),
+                  let sessionType = SessionType(rawValue: snapshot.sessionTypeRaw) else { return }
                 let newSession = PomodoroSession(
                     sessionType: sessionType,
                     startTime: startTime,
-                    plannedDurationMinutes: savedSelectedMinutes,
+                    plannedDurationMinutes: snapshot.selectedMinutes,
                     status: timerState == .running ? .running : .paused,
                     events: [SessionEvent(timestamp: startTime, eventType: .started)],
                     title: nil,
@@ -830,7 +822,6 @@ class TimerViewModel: ObservableObject {
                 currentSession = newSession
                 dataStore.addSession(newSession)
                 print("Created new session from saved state: \(newSession.id)")
-            }
         }
     }
     
@@ -901,52 +892,49 @@ class TimerViewModel: ObservableObject {
     
     /// Save current timer state to disk
     private func saveTimerState() {
-        if timerState == .running || timerState == .paused {
-            savedTimerStateRaw = timerState == .running ? "running" : "paused"
-            savedStartTimeTimestamp = startTime?.timeIntervalSince1970 ?? 0
-            savedOriginalDurationSeconds = originalDurationSeconds
-            savedPausedDuration = pausedDuration
-            savedPauseStartTimeTimestamp = pauseStartTime?.timeIntervalSince1970 ?? 0
-            savedSelectedMinutes = selectedMinutes
-            savedSessionTypeRaw = currentSessionType.rawValue
-        } else {
+        guard timerState == .running || timerState == .paused else {
             clearTimerState()
+            return
+        }
+        guard let startTime else { return }
+
+        let snapshot = TimerStateSnapshot(
+            timerStateRaw: (timerState == .running ? "running" : "paused"),
+            startTime: startTime,
+            originalDurationSeconds: originalDurationSeconds,
+            pausedDuration: pausedDuration,
+            pauseStartTime: pauseStartTime,
+            selectedMinutes: selectedMinutes,
+            sessionTypeRaw: currentSessionType.rawValue
+        )
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            timerStateSnapshotData = try encoder.encode(snapshot)
+        } catch {
+            print("TimerViewModel: failed to encode timer snapshot — \(error)")
         }
     }
     
     /// Clear saved timer state from disk
     private func clearTimerState() {
-        savedTimerStateRaw = ""
-        savedStartTimeTimestamp = 0
-        savedOriginalDurationSeconds = 0
-        savedPausedDuration = 0
-        savedPauseStartTimeTimestamp = 0
-        savedSelectedMinutes = 25.0
-        savedSessionTypeRaw = "Work"
-        // Note: timerWasCompleted flag is NOT cleared here - it's cleared after restoring state
+        timerStateSnapshotData = Data()
     }
     
     /// Restore timer state from disk
     private func restoreTimerState() {
-        // Only restore if we have saved state
-        guard !savedTimerStateRaw.isEmpty else { return }
-        guard savedStartTimeTimestamp > 0 else { return }
-        guard savedOriginalDurationSeconds > 0 else { return }
-        
-        // Restore basic properties
-        selectedMinutes = savedSelectedMinutes
-        originalDurationSeconds = savedOriginalDurationSeconds
-        pausedDuration = savedPausedDuration
-        startTime = Date(timeIntervalSince1970: savedStartTimeTimestamp)
-        
-        // Restore session type
-        if let sessionType = SessionType(rawValue: savedSessionTypeRaw) {
+        guard let snapshot = loadTimerStateSnapshot() else { return }
+        guard snapshot.originalDurationSeconds > 0 else { return }
+
+        selectedMinutes = snapshot.selectedMinutes
+        originalDurationSeconds = snapshot.originalDurationSeconds
+        pausedDuration = snapshot.pausedDuration
+        startTime = snapshot.startTime
+        pauseStartTime = snapshot.pauseStartTime
+
+        if let sessionType = SessionType(rawValue: snapshot.sessionTypeRaw) {
             currentSessionType = sessionType
-        }
-        
-        // Restore pause start time if paused
-        if savedPauseStartTimeTimestamp > 0 {
-            pauseStartTime = Date(timeIntervalSince1970: savedPauseStartTimeTimestamp)
         }
         
         // Calculate remaining time
@@ -964,7 +952,7 @@ class TimerViewModel: ObservableObject {
         pausedSeconds = calculatedRemaining
         
         // Restore timer state
-        if savedTimerStateRaw == "running" {
+        if snapshot.timerStateRaw == "running" {
             timerState = .running
             updateIdleTimerForSession()
             
@@ -1004,7 +992,7 @@ class TimerViewModel: ObservableObject {
                     )
                 }
             }
-        } else if savedTimerStateRaw == "paused" {
+        } else if snapshot.timerStateRaw == "paused" {
             timerState = .paused
             updateIdleTimerForSession()
             
@@ -1034,6 +1022,21 @@ class TimerViewModel: ObservableObject {
                     )
                 }
             }
+        }
+
+        // One-shot restore: avoid re-restoring on next cold launch.
+        clearTimerState()
+    }
+
+    private func loadTimerStateSnapshot() -> TimerStateSnapshot? {
+        guard !timerStateSnapshotData.isEmpty else { return nil }
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(TimerStateSnapshot.self, from: timerStateSnapshotData)
+        } catch {
+            print("TimerViewModel: failed to decode timer snapshot — \(error)")
+            return nil
         }
     }
     
