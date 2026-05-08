@@ -848,8 +848,10 @@ class TimerViewModel: ObservableObject {
         center.removeAllPendingNotificationRequests()
         
         let content = UNMutableNotificationContent()
-        content.title = "Session Complete"
-        content.body = "Your \(currentSessionType.displayName) session has finished!"
+        content.title = "Session complete"
+        content.body = currentSessionType == .work
+            ? "Focus session complete. Take a break."
+            : "Break over. Ready for the next session?"
         content.sound = .default
         
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(remainingSeconds), repeats: false)
