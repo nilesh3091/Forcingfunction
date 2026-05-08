@@ -16,6 +16,7 @@ import Combine
 struct TimerView: View {
 
     @ObservedObject var viewModel: TimerViewModel
+    @ObservedObject private var projectStore = ProjectStore.shared
     @State private var isSetupPresented = false
 
     // ── Duration drag bases (bottom handle on strip / digit drag on card)
@@ -45,18 +46,16 @@ struct TimerView: View {
                     + c.component(.minute, from: nowDate))
     }
 
-    private var pomodoroIndex: Int {
-        switch viewModel.currentSessionType {
-        case .work:                   return min(viewModel.completedPomodoros + 1, 4)
-        case .shortBreak, .longBreak: return min(max(viewModel.completedPomodoros, 1), 4)
-        }
-    }
-
     private var titleText: String {
         switch viewModel.currentSessionType {
-        case .work:       return "Pomodoro \(pomodoroIndex)."
-        case .shortBreak: return "Short break."
-        case .longBreak:  return "Long break."
+        case .shortBreak: return "Short break"
+        case .longBreak:  return "Long break"
+        case .work:
+            if let id = UUID(uuidString: viewModel.setupProjectId),
+               let p = projectStore.project(id: id) {
+                return p.name
+            }
+            return "Focus"
         }
     }
 
@@ -396,12 +395,6 @@ struct TimerView: View {
             HStack {
                 Text("REMAINING").hcMonoLabel(size: 9)
                 Spacer()
-                Text("\(pomodoroIndex)/4")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(HC.red, in: Capsule())
             }
             .padding(.bottom, 6)
 
@@ -460,23 +453,10 @@ struct TimerView: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(HC.muted)
                 .padding(.top, isIdle ? 4 : 2)
-
-            segmentBar.padding(.top, 10)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(sand, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var segmentBar: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<4, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(i < pomodoroIndex ? HC.red : HC.line)
-                    .frame(height: 3)
-                    .animation(.easeInOut(duration: 0.2), value: pomodoroIndex)
-            }
-        }
     }
 
     private var statsRow: some View {
