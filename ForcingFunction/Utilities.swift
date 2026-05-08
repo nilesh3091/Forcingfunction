@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import AudioToolbox
+import SwiftData
 
 /// Utility functions for converting between angles and minutes
 struct AngleUtilities {
@@ -133,5 +134,240 @@ struct SoundManager {
     static func playCompletionSound() {
         // Use system sound for completion
         AudioServicesPlaySystemSound(1057) // System sound ID for alert
+    }
+}
+
+// MARK: - Repository injection (Phase 2)
+
+protocol FocusRepository: Sendable {
+    func fetchSessions(in interval: DateInterval) throws -> [SDFocusSession]
+    func fetchProjects(includeArchived: Bool) throws -> [SDProject]
+
+    func upsertProject(
+        id: UUID,
+        name: String,
+        colorRaw: String,
+        goalHours: Double,
+        createdDate: Date,
+        isArchived: Bool
+    ) throws
+
+    func upsertTag(
+        id: UUID,
+        name: String,
+        createdDate: Date,
+        projectId: UUID?,
+        parentId: UUID?
+    ) throws
+
+    func upsertSession(
+        id: UUID,
+        startTime: Date,
+        endTime: Date?,
+        plannedMinutes: Double,
+        statusRaw: String,
+        kindRaw: String,
+        title: String?,
+        projectId: UUID?,
+        tagId: UUID?,
+        events: [SessionEvent]
+    ) throws
+
+    func deleteAllSessions() throws
+}
+
+final class SwiftDataFocusRepository: FocusRepository {
+    private let container: ModelContainer
+
+    init(container: ModelContainer) {
+        self.container = container
+    }
+
+    private func context() -> ModelContext {
+        ModelContext(container)
+    }
+
+    func fetchSessions(in interval: DateInterval) throws -> [SDFocusSession] {
+        let ctx = context()
+        let start = interval.start
+        let end = interval.end
+        let descriptor = FetchDescriptor<SDFocusSession>(
+            predicate: #Predicate { $0.startTime >= start && $0.startTime <= end },
+            sortBy: [SortDescriptor(\.startTime, order: .reverse)]
+        )
+        return try ctx.fetch(descriptor)
+    }
+
+    func fetchProjects(includeArchived: Bool) throws -> [SDProject] {
+        let ctx = context()
+        let descriptor: FetchDescriptor<SDProject>
+        if includeArchived {
+            descriptor = FetchDescriptor(sortBy: [SortDescriptor(\.createdDate, order: .forward)])
+        } else {
+            descriptor = FetchDescriptor(
+                predicate: #Predicate { $0.isArchived == false },
+                sortBy: [SortDescriptor(\.createdDate, order: .forward)]
+            )
+        }
+        return try ctx.fetch(descriptor)
+    }
+
+    func upsertProject(
+        id: UUID,
+        name: String,
+        colorRaw: String,
+        goalHours: Double,
+        createdDate: Date,
+        isArchived: Bool
+    ) throws {
+        let ctx = context()
+        let existing = try ctx.fetch(
+            FetchDescriptor<SDProject>(predicate: #Predicate { $0.id == id })
+        ).first
+
+        if let p = existing {
+            p.name = name
+            p.colorRaw = colorRaw
+            p.goalHours = goalHours
+            p.createdDate = createdDate
+            p.isArchived = isArchived
+        } else {
+            ctx.insert(SDProject(
+                id: id,
+                name: name,
+                colorRaw: colorRaw,
+                goalHours: goalHours,
+                createdDate: createdDate,
+                isArchived: isArchived
+            ))
+        }
+
+        try ctx.save()
+    }
+
+    func upsertTag(
+        id: UUID,
+        name: String,
+        createdDate: Date,
+        projectId: UUID?,
+        parentId: UUID?
+    ) throws {
+        let ctx = context()
+        let existing = try ctx.fetch(
+            FetchDescriptor<SDProjectTag>(predicate: #Predicate { $0.id == id })
+        ).first
+
+        let project: SDProject? = if let projectId {
+            try ctx.fetch(FetchDescriptor<SDProject>(predicate: #Predicate { $0.id == projectId })).first
+        } else { nil }
+
+        let parent: SDProjectTag? = if let parentId {
+            try ctx.fetch(FetchDescriptor<SDProjectTag>(predicate: #Predicate { $0.id == parentId })).first
+        } else { nil }
+
+        if let t = existing {
+            t.name = name
+            t.createdDate = createdDate
+            t.project = project
+            t.parent = parent
+        } else {
+            ctx.insert(SDProjectTag(
+                id: id,
+                name: name,
+                createdDate: createdDate,
+                project: project,
+                parent: parent
+            ))
+        }
+
+        try ctx.save()
+    }
+
+    func upsertSession(
+        id: UUID,
+        startTime: Date,
+        endTime: Date?,
+        plannedMinutes: Double,
+        statusRaw: String,
+        kindRaw: String,
+        title: String?,
+        projectId: UUID?,
+        tagId: UUID?,
+        events: [SessionEvent]
+    ) throws {
+        let ctx = context()
+        let existing = try ctx.fetch(
+            FetchDescriptor<SDFocusSession>(predicate: #Predicate { $0.id == id })
+        ).first
+
+        let project: SDProject? = if let projectId {
+            try ctx.fetch(FetchDescriptor<SDProject>(predicate: #Predicate { $0.id == projectId })).first
+        } else { nil }
+
+        let tag: SDProjectTag? = if let tagId {
+            try ctx.fetch(FetchDescriptor<SDProjectTag>(predicate: #Predicate { $0.id == tagId })).first
+        } else { nil }
+
+        let session: SDFocusSession
+        if let s = existing {
+            session = s
+            session.startTime = startTime
+            session.endTime = endTime
+            session.plannedMinutes = plannedMinutes
+            session.statusRaw = statusRaw
+            session.kindRaw = kindRaw
+            session.title = title
+            session.project = project
+            session.tag = tag
+            session.events.removeAll()
+        } else {
+            session = SDFocusSession(
+                id: id,
+                startTime: startTime,
+                endTime: endTime,
+                plannedMinutes: plannedMinutes,
+                statusRaw: statusRaw,
+                kindRaw: kindRaw,
+                title: title,
+                project: project,
+                tag: tag
+            )
+            ctx.insert(session)
+        }
+
+        for e in events.sorted(by: { $0.timestamp < $1.timestamp }) {
+            let record = SDSessionEventRecord(timestamp: e.timestamp, typeRaw: e.eventType.rawValue, session: session)
+            ctx.insert(record)
+            session.events.append(record)
+        }
+
+        try ctx.save()
+    }
+
+    func deleteAllSessions() throws {
+        let ctx = context()
+        let sessions = try ctx.fetch(FetchDescriptor<SDFocusSession>())
+        for s in sessions { ctx.delete(s) }
+        try ctx.save()
+    }
+}
+
+private struct UnconfiguredFocusRepository: FocusRepository {
+    func fetchSessions(in interval: DateInterval) throws -> [SDFocusSession] { [] }
+    func fetchProjects(includeArchived: Bool) throws -> [SDProject] { [] }
+    func upsertProject(id: UUID, name: String, colorRaw: String, goalHours: Double, createdDate: Date, isArchived: Bool) throws {}
+    func upsertTag(id: UUID, name: String, createdDate: Date, projectId: UUID?, parentId: UUID?) throws {}
+    func upsertSession(id: UUID, startTime: Date, endTime: Date?, plannedMinutes: Double, statusRaw: String, kindRaw: String, title: String?, projectId: UUID?, tagId: UUID?, events: [SessionEvent]) throws {}
+    func deleteAllSessions() throws {}
+}
+
+private struct FocusRepositoryKey: EnvironmentKey {
+    static let defaultValue: any FocusRepository = UnconfiguredFocusRepository()
+}
+
+extension EnvironmentValues {
+    var focusRepository: any FocusRepository {
+        get { self[FocusRepositoryKey.self] }
+        set { self[FocusRepositoryKey.self] = newValue }
     }
 }

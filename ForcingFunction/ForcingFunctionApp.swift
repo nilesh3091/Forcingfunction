@@ -31,6 +31,7 @@ import SwiftData
 @main
 struct ForcingFunctionApp: App {
     private let modelContainer: ModelContainer
+    private let focusRepository: any FocusRepository
 
     init() {
         do {
@@ -44,6 +45,8 @@ struct ForcingFunctionApp: App {
             fatalError("SwiftData ModelContainer init failed: \(error)")
         }
 
+        focusRepository = SwiftDataFocusRepository(container: modelContainer)
+
         // Initialize widget data on app launch
         WidgetDataManager.shared.updateWidgetData()
         
@@ -55,6 +58,7 @@ struct ForcingFunctionApp: App {
         WindowGroup {
             ContentView()
                 .modelContainer(modelContainer)
+                .environment(\.focusRepository, focusRepository)
                 .onOpenURL { url in
                     // Handle deep links from widget
                     // The MainTabView will handle the actual navigation

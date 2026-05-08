@@ -16,16 +16,16 @@
   ACTIVE PHASE      : 2 — Persistence rebuild (SwiftData)
   PHASE STARTED     : 2026-05-08
   LAST COMPLETED    : 2.0 — Setup & baseline (branch + baseline tag)
-  CURRENTLY ON      : 2.1 — SwiftData container + models (in-app)
-  NEXT TO DO        : 2.2 — Repository layer + Environment injection
+  CURRENTLY ON      : 2.2 — Repository layer + Environment injection
+  NEXT TO DO        : 2.3 — One-time migration from legacy JSON → SwiftData
   PHASE COMPLETE    : ⛔️ no
 ═══════════════════════════════════════════════════════════
 
 STEP CHECKLIST:
 
   [x] 2.0  Setup & baseline (branch + baseline tag)
-  [~] 2.1  SwiftData container + models (no view changes yet)
-  [ ] 2.2  Repository layer + Environment injection
+  [x] 2.1  SwiftData container + models (no view changes yet)
+  [~] 2.2  Repository layer + Environment injection
   [ ] 2.3  One-time migration from legacy JSON → SwiftData
   [ ] 2.4  Replace app reads/writes to use repository (no JSON stores in app flow)
   [ ] 2.5  Replace scattered @AppStorage with single Codable blob
