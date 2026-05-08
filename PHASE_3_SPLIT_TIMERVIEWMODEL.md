@@ -16,10 +16,10 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 3 — Split TimerViewModel
   PHASE STARTED     : 2026-05-08
-  LAST COMPLETED    : 3.8 — Fix Live Activity push-token leak
+  LAST COMPLETED    : 3.9 — Final verification + tag phase done
   CURRENTLY ON      : (none)
-  NEXT TO DO        : 3.9 — Final verification + tag phase done
-  PHASE COMPLETE    : ⛔️ no
+  NEXT TO DO        : Phase 4
+  PHASE COMPLETE    : ✅ yes
 ═══════════════════════════════════════════════════════════
 
 STEP CHECKLIST:
@@ -33,7 +33,7 @@ STEP CHECKLIST:
   [x] 3.6  Protocol-front coordinators (notifications/live activity/bg/widget)
   [x] 3.7  Delete or shrink `TimerViewModel` (≤ 200 LOC composer)
   [x] 3.8  Fix Live Activity push-token leak (audit noted in roadmap)
-  [ ] 3.9  Final verification + tag phase done
+  [x] 3.9  Final verification + tag phase done
 
 LEGEND:  [ ] not started   [~] in progress   [x] done   [-] skipped (with reason)
 ```

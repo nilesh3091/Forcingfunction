@@ -100,6 +100,7 @@ struct PomodoroSessionActiveDurationTests {
 // MARK: - TimerEngine
 
 @Suite("TimerEngine wall-clock correctness")
+@MainActor
 struct TimerEngineTests {
     @Test func ticksDownFromWallClock() {
         var engine = TimerEngine()
