@@ -241,14 +241,6 @@ struct SettingsView: View {
                                 .foregroundStyle(HC.red)
                         }
                         
-                        Button(action: {
-                            viewModel.totalFocusMinutes = 0
-                            viewModel.completedPomodoros = 0
-                        }) {
-                            Text("Reset Statistics")
-                                .font(HC.text(16))
-                                .foregroundStyle(HC.red)
-                        }
                     }
                     .listRowBackground(HC.card)
                     .listRowSeparatorTint(HC.line)

@@ -79,11 +79,6 @@ struct TimerView: View {
         return "\(min(Int(Double(viewModel.totalFocusMinutes) / Double(g) * 100), 999))%"
     }
 
-    private var trimmedTag: String? {
-        let t = viewModel.setupTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
-
     /// Block top:
     ///   idle    → nowMins (live)
     ///   running / paused → actual session start (nowMins − elapsed)
@@ -173,16 +168,6 @@ struct TimerView: View {
                     .foregroundStyle(HC.ink)
             }
             Spacer()
-            if let tag = trimmedTag {
-                Text(tag.uppercased())
-                    .font(HC.mono(9, weight: .semibold))
-                    .tracking(1.0)
-                    .foregroundStyle(HC.bg)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(HC.ink, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .padding(.top, 6)
-            }
         }
     }
 
