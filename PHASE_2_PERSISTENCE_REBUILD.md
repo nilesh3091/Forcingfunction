@@ -16,9 +16,9 @@
   ACTIVE PHASE      : 2 — Persistence rebuild (SwiftData)
   PHASE STARTED     : 2026-05-08
   LAST COMPLETED    : 2.0 — Setup & baseline (branch + baseline tag)
-  CURRENTLY ON      : 2.8 — Add repository-layer unit tests (in-memory container)
-  NEXT TO DO        : 2.9 — Final verification + tag phase done
-  PHASE COMPLETE    : ⛔️ no
+  CURRENTLY ON      : (none)
+  NEXT TO DO        : Phase 3 — Split TimerViewModel
+  PHASE COMPLETE    : ✅ yes
 ═══════════════════════════════════════════════════════════
 
 STEP CHECKLIST:
@@ -31,8 +31,8 @@ STEP CHECKLIST:
   [x] 2.5  Replace scattered @AppStorage with single Codable blob
   [x] 2.6  Centralize minutes math (single billed-minutes truth) + update call sites
   [x] 2.7  Remove remaining `Data(contentsOf:)` / `.write(to:)` from app code
-  [~] 2.8  Add repository-layer unit tests (in-memory container)
-  [ ] 2.9  Final verification + tag phase done
+  [x] 2.8  Add repository-layer unit tests (in-memory container)
+  [x] 2.9  Final verification + tag phase done
 
 LEGEND:  [ ] not started   [~] in progress   [x] done   [-] skipped (with reason)
 ```
