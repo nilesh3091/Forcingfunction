@@ -13,14 +13,14 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 1 — Decouple Pomodoro
   PHASE STARTED     : 2026-05-08
-  LAST COMPLETED    : Step 1.0 — Setup & baseline
+  LAST COMPLETED    : Step 1.1 — Drop wasAutoStarted from PomodoroSession
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 1.1 — Drop wasAutoStarted from PomodoroSession
+  NEXT TO DO        : Step 1.2 — Add strictPomodoroMode flag + gate cycle logic
   PHASE COMPLETE    : ❌ no
 ═══════════════════════════════════════════════════════════
 
 [x] 1.0  Setup & baseline
-[ ] 1.1  Drop wasAutoStarted from PomodoroSession
+[x] 1.1  Drop wasAutoStarted from PomodoroSession
 [ ] 1.2  Add strictPomodoroMode flag + gate cycle logic
 [ ] 1.3  Humanize notification body
 [ ] 1.4  Strip Pomodoro chrome from TimerView header

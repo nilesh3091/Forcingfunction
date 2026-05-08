@@ -71,7 +71,6 @@ class TimerViewModel: ObservableObject {
     private var hasLoadedSettings = false
     private var currentSession: PomodoroSession?
     private let dataStore = PomodoroDataStore.shared
-    private var isAutoStartingNext = false
     private let liveActivityManager = LiveActivityManager.shared
     private let backgroundTaskManager = BackgroundTaskManager.shared
     
@@ -329,7 +328,6 @@ class TimerViewModel: ObservableObject {
                 plannedDurationMinutes: selectedMinutes,
                 status: .running,
                 events: [SessionEvent(timestamp: now, eventType: .started)],
-                wasAutoStarted: isAutoStartingNext,
                 title: cleanTitle.isEmpty ? nil : cleanTitle,
                 tag: cleanTag.isEmpty ? nil : cleanTag,
                 tagColor: (cleanTag.isEmpty ? nil : setupTagColor),
@@ -338,7 +336,6 @@ class TimerViewModel: ObservableObject {
             )
             currentSession = newSession
             dataStore.addSession(newSession)
-            isAutoStartingNext = false // Reset flag after use
             
             // Start Live Activity for new session (if enabled)
             if liveActivitiesEnabled {
@@ -581,7 +578,6 @@ class TimerViewModel: ObservableObject {
         
         // Auto-start the next session if enabled
         if autoStartNext {
-            isAutoStartingNext = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.startTimer()
             }
@@ -827,7 +823,6 @@ class TimerViewModel: ObservableObject {
                     plannedDurationMinutes: savedSelectedMinutes,
                     status: timerState == .running ? .running : .paused,
                     events: [SessionEvent(timestamp: startTime, eventType: .started)],
-                    wasAutoStarted: false,
                     title: nil,
                     tag: nil,
                     tagColor: nil
