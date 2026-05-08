@@ -15,10 +15,10 @@
 ═══════════════════════════════════════════════════════════
   ACTIVE PHASE      : 0 — Triage & Honesty
   PHASE STARTED     : 2026-05-07
-  LAST COMPLETED    : 0.8 — Add real unit tests (build-for-testing green; sim run deferred)
+  LAST COMPLETED    : 0.9 — Final verification + tag phase done
   CURRENTLY ON      : (none)
-  NEXT TO DO        : Step 0.9 — Final verification + tag phase done
-  PHASE COMPLETE    : ❌ no
+  NEXT TO DO        : Phase 1 — see PHASE_1_DECOUPLE_POMODORO.md (not yet authored)
+  PHASE COMPLETE    : ✅ yes
 ═══════════════════════════════════════════════════════════
 
 STEP CHECKLIST:
@@ -32,7 +32,7 @@ STEP CHECKLIST:
   [x] 0.6  Delete "Reset Statistics" button     (SettingsView.swift)
   [x] 0.7  Delete dead setupTag pill            (TimerView.swift header)
   [x] 0.8  Add real unit tests                  (ForcingFunctionTests.swift; sim test-run deferred)
-  [ ] 0.9  Final verification + tag phase done  (xcodebuild + git tag phase-0-done)
+  [x] 0.9  Final verification + tag phase done  (xcodebuild + git tag phase-0-done)
 
 LEGEND:  [ ] not started   [~] in progress   [x] done   [-] skipped (with reason)
 ```
