@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ProfileView: View {
-    @ObservedObject var viewModel: TimerViewModel
+    @ObservedObject var viewModel: FocusSessionStore
     
     var body: some View {
         SettingsView(viewModel: viewModel)
@@ -16,6 +16,6 @@ struct ProfileView: View {
 }
 
 #Preview {
-    ProfileView(viewModel: TimerViewModel())
+    ProfileView(viewModel: FocusSessionStore())
 }
 

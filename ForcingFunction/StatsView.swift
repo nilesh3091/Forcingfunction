@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct StatsView: View {
-    @ObservedObject var viewModel: TimerViewModel
+    @ObservedObject var viewModel: FocusSessionStore
     @State private var selectedDate: Date = Date()
     @State private var refreshTrigger: UUID = UUID()
     @State private var projectsExpanded: Bool = true
@@ -181,5 +181,5 @@ struct ProjectProgressCard: View {
 }
 
 #Preview {
-    StatsView(viewModel: TimerViewModel())
+    StatsView(viewModel: FocusSessionStore())
 }

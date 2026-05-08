@@ -15,7 +15,7 @@ import Combine
 
 struct TimerView: View {
 
-    @ObservedObject var viewModel: TimerViewModel
+    @ObservedObject var viewModel: FocusSessionStore
     @ObservedObject private var projectStore = ProjectStore.shared
     @State private var isSetupPresented = false
 
@@ -560,5 +560,5 @@ struct TimerView: View {
 }
 
 #Preview {
-    TimerView(viewModel: TimerViewModel())
+    TimerView(viewModel: FocusSessionStore())
 }

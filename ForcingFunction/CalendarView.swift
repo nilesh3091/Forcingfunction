@@ -55,7 +55,7 @@ private enum CalendarItem: Identifiable {
 }
 
 struct CalendarView: View {
-    @ObservedObject var viewModel: TimerViewModel
+    @ObservedObject var viewModel: FocusSessionStore
     @State private var currentMonth: Date = Date()
     @State private var selectedSpecificDate: Date? = nil
     @State private var selectedRange: HistoryRange = .today
@@ -1057,5 +1057,5 @@ private struct DatePillView: View {
 }
 
 #Preview {
-    CalendarView(viewModel: TimerViewModel())
+    CalendarView(viewModel: FocusSessionStore())
 }

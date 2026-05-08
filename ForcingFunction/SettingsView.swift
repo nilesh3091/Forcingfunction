@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject var viewModel: TimerViewModel
+    @ObservedObject var viewModel: FocusSessionStore
     
     private let pomodoroMinutesOptions: [Double] = [0, 15, 30, 45, 60]
     
@@ -294,5 +294,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(viewModel: TimerViewModel())
+    SettingsView(viewModel: FocusSessionStore())
 }

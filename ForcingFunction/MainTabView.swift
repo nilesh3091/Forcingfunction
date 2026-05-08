@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @StateObject private var viewModel = TimerViewModel()
+    @StateObject private var viewModel = FocusSessionStore()
     @State private var selectedTab = 0
     @Environment(\.openURL) private var openURL
 

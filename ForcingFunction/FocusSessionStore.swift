@@ -1,30 +1,76 @@
 //
-//  TimerViewModel.swift
+//  FocusSessionStore.swift
 //  ForcingFunction
 //
-//  Compatibility shim: Phase 3 introduces `FocusSessionStore`.
+//  SwiftUI-facing facade that composes the timer engine + persistence + recording + coordination.
 //
 
-typealias TimerViewModel = FocusSessionStore
-/*
+import Foundation
+import SwiftUI
+import Combine
+import UserNotifications
+import UIKit
 
-//
-//  TimerViewModel.swift
-//  ForcingFunction
-//
-//  Compatibility shim: Phase 3 introduces `FocusSessionStore`.
-//
+@MainActor
+final class FocusSessionStore: ObservableObject {
+    // MARK: - Published Properties
+    @Published var selectedMinutes: Double = 25.0
+    @Published var remainingSeconds: Int = 1500  // 25 minutes * 60 seconds
+    @Published var timerState: TimerState = .idle
+    @Published var currentSessionType: SessionType = .work
+    @Published var completedPomodoros: Int = 0
+    @Published var totalFocusMinutes: Int = 0
+    @Published var healthWorkouts: [HealthWorkoutSession] = []
+    
+    // MARK: - Per-session metadata ("Setup")
+    @AppStorage("setupPomodoroTitle") var setupTitle: String = ""
+    @AppStorage("setupPomodoroTag") var setupTag: String = ""
+    @AppStorage("setupPomodoroTagColor") private var setupTagColorRaw: String = CategoryColor.teal.rawValue
+    /// UUID string of the selected project (empty = none).
+    @AppStorage("setupProjectId") var setupProjectId: String = ""
+    /// UUID string of the selected project tag (empty = none).
+    @AppStorage("setupTagId") var setupTagId: String = ""
 
-typealias TimerViewModel = FocusSessionStore
-
-//
-//  TimerViewModel.swift
-//  ForcingFunction
-//
-//  Compatibility shim: Phase 3 introduces `FocusSessionStore`.
-//
-
-typealias TimerViewModel = FocusSessionStore
+    var setupTagColor: CategoryColor {
+        get { CategoryColor(rawValue: setupTagColorRaw) ?? .teal }
+        set { setupTagColorRaw = newValue.rawValue }
+    }
+    
+    // MARK: - Settings (using @AppStorage)
+    @AppStorage("pomodoroMinutes") var pomodoroMinutes: Double = AppSettings.defaultPomodoroMinutes
+    @AppStorage("shortBreakMinutes") var shortBreakMinutes: Double = AppSettings.defaultShortBreakMinutes
+    @AppStorage("longBreakMinutes") var longBreakMinutes: Double = AppSettings.defaultLongBreakMinutes
+    @AppStorage("pomodorosBeforeLongBreak") var pomodorosBeforeLongBreak: Int = AppSettings.defaultPomodorosBeforeLongBreak
+    @AppStorage("snapIncrement") var snapIncrement: Double = AppSettings.defaultSnapIncrement
+    @AppStorage("hasMigratedToNewRange") var hasMigratedToNewRange: Bool = false
+    @AppStorage("strictPomodoroMode") var strictPomodoroMode: Bool = false
+    @AppStorage("autoStartNext") var autoStartNext: Bool = false
+    @AppStorage("playSoundOnCompletion") var playSoundOnCompletion: Bool = true
+    @AppStorage("hapticsEnabled") var hapticsEnabled: Bool = true
+    @AppStorage("liveActivitiesEnabled") var liveActivitiesEnabled: Bool = true
+    @AppStorage("dailyFocusGoalMinutes") var dailyFocusGoalMinutes: Int = AppSettings.defaultDailyFocusGoalMinutes
+    @AppStorage("hasMigratedToSingleDailyGoal") private var hasMigratedToSingleDailyGoal: Bool = false
+    @AppStorage("appAppearance") private var appAppearanceRaw: String = AppAppearance.system.rawValue
+    
+    // MARK: - Private Properties
+    private var timer: Timer?
+    private var engine = TimerEngine()
+    private let statePersistence = TimerStatePersistence()
+    private let sessionRecorder = SessionRecorder(dataStore: .shared)
+    private let pomodoroCoordinator = PomodoroCoordinator()
+    private var cancellables = Set<AnyCancellable>()
+    private var hasLoadedSettings = false
+    private var currentSession: PomodoroSession?
+    private let dataStore = PomodoroDataStore.shared
+    private let liveActivityManager = LiveActivityManager.shared
+    private let backgroundTaskManager = BackgroundTaskManager.shared
+    
+    // MARK: - Computed Properties
+    
+    /// Centralized theme system - use this for all styling
+    var theme: AppTheme {
+        AppTheme.standard
+    }
     
     var appAppearance: AppAppearance {
         get { AppAppearance(rawValue: appAppearanceRaw) ?? .system }
@@ -164,7 +210,6 @@ typealias TimerViewModel = FocusSessionStore
         // Clean up orphaned sessions from crashes/force quits
         // This removes any running/paused sessions that were left behind
         // IMPORTANT: This runs AFTER recoverTimerStateIfNeeded() and completeExpiredSessions()
-        // so expired sessions can be completed first
         dataStore.cleanupOrphanedSessions()
         
         Task { @MainActor in
@@ -192,14 +237,7 @@ typealias TimerViewModel = FocusSessionStore
     /// Keeps the device from auto-locking while a session is active (running or paused).
     private func updateIdleTimerForSession() {
         let keepAwake = (timerState == .running || timerState == .paused)
-        let apply = {
-            UIApplication.shared.isIdleTimerDisabled = keepAwake
-        }
-        if Thread.isMainThread {
-            apply()
-        } else {
-            DispatchQueue.main.async(execute: apply)
-        }
+        UIApplication.shared.isIdleTimerDisabled = keepAwake
     }
     
     // MARK: - Statistics Loading
@@ -476,11 +514,11 @@ typealias TimerViewModel = FocusSessionStore
         if let updated = next.completedPomodoros {
             completedPomodoros = updated
         }
-
+        
         engine.resetToIdle(minutes: selectedMinutes)
         syncPublishedFromEngine()
         updateIdleTimerForSession()
-
+        
         if autoStartNext {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.startTimer() }
         }
@@ -526,11 +564,13 @@ typealias TimerViewModel = FocusSessionStore
         
         // Create timer on main thread - Timer.scheduledTimer automatically adds to RunLoop
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] timer in
-            guard let self = self else {
+            guard let self else {
                 timer.invalidate()
                 return
             }
-            self.tick()
+            Task { @MainActor in
+                self.tick()
+            }
         }
     }
     
@@ -559,7 +599,7 @@ typealias TimerViewModel = FocusSessionStore
     private func updateLiveActivityInBackground() {
         guard liveActivitiesEnabled else { return }
         guard engine.timerState == .running, let startTime = engine.startTime else { return }
-
+        
         let calculatedRemaining = engine.calculateRemainingSeconds(now: Date())
         
         liveActivityManager.updateActivity(
@@ -661,7 +701,7 @@ typealias TimerViewModel = FocusSessionStore
         // Try to find the session from data store using saved state
         guard let startTime = engine.startTime, engine.originalDurationSeconds > 0 else { return }
 
-            Task { [weak self] in
+        Task { [weak self] in
             guard let self else { return }
             let restored = await self.sessionRecorder.restoreIfNeeded(startTime: startTime)
             await MainActor.run {
@@ -756,7 +796,7 @@ typealias TimerViewModel = FocusSessionStore
         )
         statePersistence.save(snapshot)
     }
-    
+
     private func recoverTimerStateIfNeeded() {
         let now = Date()
         let outcome = statePersistence.recoverIfNeeded(now: now, engine: &engine, currentSessionType: &currentSessionType)
@@ -813,17 +853,20 @@ typealias TimerViewModel = FocusSessionStore
             }
         }
     }
+
+    private func syncPublishedFromEngine() {
+        selectedMinutes = engine.selectedMinutes
+        remainingSeconds = engine.remainingSeconds
+        timerState = engine.timerState
+    }
     
     deinit {
         timer?.invalidate()
-        cancelNotification()
-        if Thread.isMainThread {
+        let center = UNUserNotificationCenter.current()
+        Task { @MainActor in
+            center.removeAllPendingNotificationRequests()
             UIApplication.shared.isIdleTimerDisabled = false
-        } else {
-            DispatchQueue.main.async {
-                UIApplication.shared.isIdleTimerDisabled = false
-            }
         }
     }
 }
-*/
+

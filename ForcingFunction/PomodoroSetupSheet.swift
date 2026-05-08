@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PomodoroSetupSheet: View {
-    @ObservedObject var viewModel: TimerViewModel
+    @ObservedObject var viewModel: FocusSessionStore
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject private var projectStore = ProjectStore.shared
@@ -377,5 +377,5 @@ private struct ProjectChip: View {
 }
 
 #Preview {
-    PomodoroSetupSheet(viewModel: TimerViewModel())
+    PomodoroSetupSheet(viewModel: FocusSessionStore())
 }
