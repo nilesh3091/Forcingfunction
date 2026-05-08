@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import UIKit
+import SwiftData
 
 /// Represents the type of session in the Pomodoro cycle
 enum SessionType: String, CaseIterable, Codable {
@@ -299,6 +300,144 @@ struct Project: Codable, Identifiable {
     /// Sub-tags of a given parent tag.
     func subTags(of parentId: UUID) -> [ProjectTag] {
         tags.filter { $0.parentId == parentId }.sorted { $0.createdDate < $1.createdDate }
+    }
+}
+
+// MARK: - SwiftData (Phase 2)
+
+/// SwiftData-backed persistence models.
+///
+/// NOTE: Phase 2 introduces these alongside the legacy JSON Codable structs.
+/// The app switches read/write paths over in later Phase 2 steps.
+@Model
+final class SDProject {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    /// Stored as `CategoryColor.rawValue` to avoid SwiftData enum persistence edge cases.
+    var colorRaw: String
+    var goalHours: Double
+    var createdDate: Date
+    var isArchived: Bool
+
+    @Relationship(deleteRule: .cascade, inverse: \SDProjectTag.project) var tags: [SDProjectTag]
+    @Relationship(inverse: \SDFocusSession.project) var sessions: [SDFocusSession]
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        colorRaw: String,
+        goalHours: Double = 10_000,
+        createdDate: Date = Date(),
+        isArchived: Bool = false,
+        tags: [SDProjectTag] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.colorRaw = colorRaw
+        self.goalHours = goalHours
+        self.createdDate = createdDate
+        self.isArchived = isArchived
+        self.tags = tags
+        self.sessions = []
+    }
+
+    var color: CategoryColor {
+        CategoryColor(rawValue: colorRaw) ?? .teal
+    }
+}
+
+@Model
+final class SDProjectTag {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var createdDate: Date
+
+    @Relationship(deleteRule: .nullify) var project: SDProject?
+    @Relationship(deleteRule: .nullify) var parent: SDProjectTag?
+    @Relationship(deleteRule: .cascade, inverse: \SDProjectTag.parent) var children: [SDProjectTag]
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        createdDate: Date = Date(),
+        project: SDProject? = nil,
+        parent: SDProjectTag? = nil,
+        children: [SDProjectTag] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.createdDate = createdDate
+        self.project = project
+        self.parent = parent
+        self.children = children
+    }
+}
+
+@Model
+final class SDFocusSession {
+    @Attribute(.unique) var id: UUID
+    var startTime: Date
+    var endTime: Date?
+    var plannedMinutes: Double
+    /// Stored as `SessionStatus.rawValue`.
+    var statusRaw: String
+    /// Stored as `SessionType.rawValue` (Phase 1 kept `SessionType` unchanged).
+    var kindRaw: String
+    var title: String?
+
+    @Relationship(deleteRule: .nullify) var project: SDProject?
+    @Relationship(deleteRule: .nullify) var tag: SDProjectTag?
+    @Relationship(deleteRule: .cascade, inverse: \SDSessionEventRecord.session) var events: [SDSessionEventRecord]
+
+    init(
+        id: UUID = UUID(),
+        startTime: Date,
+        endTime: Date? = nil,
+        plannedMinutes: Double,
+        statusRaw: String,
+        kindRaw: String,
+        title: String? = nil,
+        project: SDProject? = nil,
+        tag: SDProjectTag? = nil,
+        events: [SDSessionEventRecord] = []
+    ) {
+        self.id = id
+        self.startTime = startTime
+        self.endTime = endTime
+        self.plannedMinutes = plannedMinutes
+        self.statusRaw = statusRaw
+        self.kindRaw = kindRaw
+        self.title = title
+        self.project = project
+        self.tag = tag
+        self.events = events
+    }
+
+    var status: SessionStatus {
+        SessionStatus(rawValue: statusRaw) ?? .running
+    }
+
+    var kind: SessionType {
+        SessionType(rawValue: kindRaw) ?? .work
+    }
+}
+
+@Model
+final class SDSessionEventRecord {
+    var timestamp: Date
+    /// Stored as `EventType.rawValue`.
+    var typeRaw: String
+
+    @Relationship(deleteRule: .nullify) var session: SDFocusSession?
+
+    init(timestamp: Date, typeRaw: String, session: SDFocusSession? = nil) {
+        self.timestamp = timestamp
+        self.typeRaw = typeRaw
+        self.session = session
+    }
+
+    var type: EventType {
+        EventType(rawValue: typeRaw) ?? .started
     }
 }
 

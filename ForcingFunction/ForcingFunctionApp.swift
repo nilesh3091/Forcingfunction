@@ -26,10 +26,24 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import SwiftData
 
 @main
 struct ForcingFunctionApp: App {
+    private let modelContainer: ModelContainer
+
     init() {
+        do {
+            modelContainer = try ModelContainer(
+                for: SDProject.self,
+                SDProjectTag.self,
+                SDFocusSession.self,
+                SDSessionEventRecord.self
+            )
+        } catch {
+            fatalError("SwiftData ModelContainer init failed: \(error)")
+        }
+
         // Initialize widget data on app launch
         WidgetDataManager.shared.updateWidgetData()
         
@@ -40,6 +54,7 @@ struct ForcingFunctionApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .modelContainer(modelContainer)
                 .onOpenURL { url in
                     // Handle deep links from widget
                     // The MainTabView will handle the actual navigation
